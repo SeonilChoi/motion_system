@@ -13,7 +13,7 @@ class MotorManagerNode : public rclcpp::Node {
 public:
     using MotorFrameMultiArray = motion_system_msgs::msg::MotorFrameMultiArray;
 
-    explicit MotorManagerNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
+    explicit MotorManagerNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
     ~MotorManagerNode();
 

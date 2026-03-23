@@ -1,12 +1,13 @@
 #include <algorithm>
 #include <chrono>
 #include <memory>
+#include <stdexcept>
+
+#include "common_motor_interface/motor_frame.hpp"
 
 #include "motion_system_pkg/motor_manager_node.hpp"
 
-#include "motor_interface/motor_driver.hpp"
-
-MotorManagerNode::MotorManagerNode(const rclcpp::NodeOptions & options)
+MotorManagerNode::MotorManagerNode(const rclcpp::NodeOptions& options)
     : Node("motor_manager_node", options)
 {
     motor_command_subscriber_ = this->create_subscription<MotorFrameMultiArray>(
@@ -27,14 +28,19 @@ MotorManagerNode::MotorManagerNode(const rclcpp::NodeOptions & options)
         }
     );
 
-    config_file_ = this->declare_parameter<std::string>("config_file", "config/motor_manager.yaml");
+    config_file_ = this->declare_parameter<std::string>("config_file", "");
+    if (config_file_.empty()) {
+        throw std::runtime_error(
+            "Parameter 'config_file' is empty. Use e.g. "
+            "`ros2 launch motion_system_pkg motion_system.launch.py`.");
+    }
 
     motor_manager_ = std::make_unique<motor_manager::MotorManager>(config_file_);
 
     manager_run_thread_ = std::thread([this]() {
         try {
             motor_manager_->run();
-        } catch (const std::exception & e) {
+        } catch (const std::exception& e) {
             RCLCPP_ERROR(get_logger(), "MotorManager::run() failed: %s", e.what());
         }
     });
@@ -52,13 +58,21 @@ MotorManagerNode::~MotorManagerNode()
 
 void MotorManagerNode::motor_command_callback(const MotorFrameMultiArray::SharedPtr msg)
 {
-    const uint8_t size = static_cast<uint8_t>(msg->data.size());
+    const size_t n_msg = msg->data.size();
+    const uint8_t size = static_cast<uint8_t>(std::min(
+        n_msg,
+        static_cast<size_t>(motor_manager::MAX_CONTROLLER_SIZE)));
     motor_interface::motor_frame_t motor_frame[motor_manager::MAX_CONTROLLER_SIZE] = {};
 
-    for (uint8_t i = 0; i < size && i < motor_manager::MAX_CONTROLLER_SIZE; i++) {
-        motor_frame[i].number_of_target_interfaces = msg->data[i].number_of_target_interfaces;
+    for (uint8_t i = 0; i < size; i++) {
+        motor_frame[i].number_of_target_interfaces = std::min(
+            msg->data[i].number_of_target_interfaces,
+            motor_interface::MAX_INTERFACE_SIZE);
         const uint8_t n_if = motor_frame[i].number_of_target_interfaces;
-        const uint8_t copy_n = std::min(n_if, motor_interface::MAX_INTERFACE_SIZE);
+        const size_t vec_n = msg->data[i].target_interface_id.size();
+        const uint8_t copy_n = static_cast<uint8_t>(std::min(
+            static_cast<size_t>(n_if),
+            vec_n));
         for (uint8_t j = 0; j < copy_n; j++) {
             motor_frame[i].target_interface_id[j] = msg->data[i].target_interface_id[j];
         }
@@ -107,7 +121,7 @@ void MotorManagerNode::motor_state_callback()
     motor_state_publisher_->publish(msg);
 }
 
-int main(int argc, char * argv[])
+int main(int argc, char* argv[])
 {
     rclcpp::init(argc, argv);
     rclcpp::spin(std::make_shared<MotorManagerNode>());

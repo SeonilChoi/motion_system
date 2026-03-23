@@ -33,6 +33,10 @@ install(TARGETS motor_manager_node
   DESTINATION lib/${PROJECT_NAME}
 )
 
+install(PROGRAMS scripts/robot_manager_node.py
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 install(DIRECTORY launch config param
   DESTINATION share/${PROJECT_NAME}
 )

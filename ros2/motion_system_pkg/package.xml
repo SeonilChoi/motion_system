@@ -12,6 +12,7 @@
   <depend>rclcpp</depend>
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
+  <depend>sensor_msgs</depend>
   <depend>motion_system_msgs</depend>
   <depend>motor_manager</depend>
   <depend>common_motor_interface</depend>
@@ -19,6 +20,7 @@
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
+  <exec_depend>joy</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

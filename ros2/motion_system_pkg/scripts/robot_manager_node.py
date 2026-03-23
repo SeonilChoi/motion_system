@@ -11,12 +11,13 @@ from rclpy.node import Node
 from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 
 from motion_system_msgs.msg import MotorFrameMultiArray
+from robot_manager import RobotManager  # noqa: F401
 from sensor_msgs.msg import Joy
 
 
 def _motor_qos() -> QoSProfile:
     return QoSProfile(
-        depth=10,
+        depth=1,
         reliability=QoSReliabilityPolicy.BEST_EFFORT,
         history=QoSHistoryPolicy.KEEP_LAST,
     )
@@ -38,18 +39,20 @@ class RobotManagerNode(Node):
 
         self._motor_state: Optional[MotorFrameMultiArray] = None
 
-        self._motor_state_sub = self.create_subscription(
-            MotorFrameMultiArray,
-            'motor_state',
-            self._motor_state_callback,
-            _motor_qos(),
-        )
         self._joy_sub = self.create_subscription(
             Joy,
             'joy',
             self._joy_callback,
             _joy_qos(),
         )
+
+        self._motor_state_sub = self.create_subscription(
+            MotorFrameMultiArray,
+            'motor_state',
+            self._motor_state_callback,
+            _motor_qos(),
+        )
+
         self._motor_cmd_pub = self.create_publisher(
             MotorFrameMultiArray,
             'motor_command',
@@ -71,9 +74,8 @@ class RobotManagerNode(Node):
         cmd.data = [copy.deepcopy(f) for f in self._motor_state.data]
 
         scale = self._vel_scale
-        
         cmd.data[0].velocity = float(-axes[1]) * scale
-        if len(cmd.data) > 1 and len(axes) > 0:
+        if len(cmd.data) > 1:
             cmd.data[1].velocity = float(axes[0]) * scale
 
         self._motor_cmd_pub.publish(cmd)

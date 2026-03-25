@@ -1,26 +1,60 @@
 # ethercat
 
-`ethercat` is the communication backend that connects the motor runtime to IgH EtherCAT Master.
+Headers: `include/ethercat/`. Namespace: `ethercat`.
 
-## Main Components
+## `ethercat_master.hpp`
 
-- `EthercatMaster`: owns master/domain lifecycle and cycle-level send/receive.
-- `EthercatController`: handles per-slave process data mapping and read/write logic.
+### `class EthercatMaster : motor_interface::MotorMaster`
 
-## Cycle-Level Behavior
+IgH EtherCAT master wrapper.
 
-1. Receive and process domain data.
-2. Read status values into `motor_frame_t`.
-3. Write command values from `motor_frame_t`.
-4. Queue/send domain data and perform clock sync.
+#### Constructor
 
-## Where To Debug
+`explicit EthercatMaster(const motor_interface::master_config_t& config)` — stores `master_index_` from `config.master_index`.
 
-- Communication init errors: master/domain setup path.
-- Wrong value mapping: controller offset/entry registration.
-- In-cycle sync issues: application time and clock sync calls.
+#### Public overrides
 
-## Dependencies
+Same as `MotorMaster`: `initialize`, `activate`, `deactivate`, `transmit`, `receive`, `apply_application_time`, `save_clock`.
 
-- `motor_interface`
-- system `libethercat`
+#### Accessors
+
+| Method | Return | Meaning |
+|--------|--------|---------|
+| `master` | `ec_master_t*` | IgH master handle. |
+| `domain` | `ec_domain_t*` | Process-data domain. |
+| `domain_pd` | `uint8_t*` | Domain process-data image. |
+| `master_index` | `unsigned int` | Configured master index. |
+
+#### Private
+
+`master_`, `domain_`, `domain_pd_`, `master_index_`
+
+---
+
+## `ethercat_controller.hpp`
+
+### ID constants
+
+Duplicates semantic ids (`ID_CONTROLWORD` … `ID_CURRENT_TORQUE`) aligned with `motor_interface::MotorDriver` for PDO mapping.
+
+### `class EthercatController : motor_interface::MotorController`
+
+Per-slave EtherCAT controller: registers PDO entries, maps `motor_frame_t` ↔ process data.
+
+#### Constructor
+
+`explicit EthercatController(const motor_interface::slave_config_t& config)` — stores `alias_`, `position_`, `vendor_id_`, `product_id_`.
+
+#### Public overrides
+
+| Method | Meaning |
+|--------|---------|
+| `initialize` | Casts master to `EthercatMaster*`, configures slave SDOs/PDOs, registers entries, builds offsets. |
+| `registerEntries` | (override) PDO entry registration. |
+| `enable` / `disable` | Drive state machine via driver. |
+| `check` | Status/controlword checks using `motor_frame_t`. |
+| `write` / `read` | Copy between `motor_frame_t` and domain image via `writeData` / `readData`. |
+
+#### Private
+
+`writeData`, `readData`, `addSlaveConfigSdos`, `addSlaveConfigPdos`, `master_`, `slave_config_`, `offset_[]`, `tx_interfaces_[]`, topology ids.

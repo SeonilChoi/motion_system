@@ -61,11 +61,14 @@ class GaitScheduler(Scheduler):
     def step(self) -> None:
         self._t += self._dt
 
-    def tick(self, action: Action) -> List[Event]:
+    def tick(self, action: Action) -> bool:
+        is_event = False
         self._events.clear()
         
         key = (self._current_state.kind, action.kind)
         next_kind = transition_table.get(key, self._current_state.kind)
+        if next_kind != self._current_state.kind:
+            is_event = True
 
         if action.kind != ActionKind.WALK:
             self._current_state = State(kind=next_kind)
@@ -99,6 +102,8 @@ class GaitScheduler(Scheduler):
                 if progress >= 1.0:
                     self._t = 0.0
                     self._prev_progress = 0.0
+
+        return is_event
 
     def _progress_raw(self, t: float) -> float:
         if self._T == 0.0:

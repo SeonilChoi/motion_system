@@ -19,11 +19,20 @@ class SilverLain(Robot):
     def get_state(self) -> State:
         return self._scheduler.current_state
 
-    def get_events(self) -> List[Event]:
-        return self._scheduler.events
-
     def set_action(self, action: Action) -> None:
-        self._scheduler.tick(action)
+        event = self._scheduler.tick(action)
+
+        if event:
+            if action.kind == ActionKind.HOME:
+                pass
+            elif action.kind == ActionKind.MOVE:
+                pass
+
+        if self._scheduler.events is not None:
+            pass
+
+        if action.kind == ActionKind.STOP:
+            pass
         
         if action.kind == ActionKind.WALK and action.duration != 0.0:
             self._scheduler.step()

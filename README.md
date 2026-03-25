@@ -1,58 +1,64 @@
 # motion_system workspace
 
-This workspace is a ROS 2 motion pipeline from joystick input to motor commands.
+## Repository layout
 
-## Read This First
+Top-level directories under this `src` tree (colcon packages live here):
 
-If you are new, follow this order:
+```
+src/
+├── README.md
+├── common/
+│   ├── common_robot_interface/     # ament_python: shared Action/State/Joy types
+│   └── common_motor_interface/     # ament_cmake: shared C++ motor_frame_t header
+├── lib/
+│   ├── robot_manager/              # ament_cmake wrapper + nested Python packages
+│   │   ├── core/robot_interface/   # abstract Robot + Scheduler
+│   │   ├── packages/robot_control/ # FSM/gait schedulers, concrete robots
+│   │   └── robot_manager/          # RobotManager, YAML + joystick mapping
+│   └── motor_manager/              # ament_cmake: EtherCAT + MINAS + MotorManager
+│       ├── core/motor_interface/   # MotorMaster / MotorController / MotorDriver
+│       ├── communications/ethercat/ # IgH EtherCAT master + controller
+│       ├── hardware/minas/         # MinasDriver
+│       └── motor_manager/          # MotorManager orchestrator
+└── ros2/
+    ├── motion_system_msgs/         # MotorFrame.msg, MotorFrameMultiArray.msg
+    └── motion_system_pkg/          # motor_manager_node (C++), robot_manager_node (Python)
+        ├── config/                 # robot + EtherCAT YAML defaults for launch
+        ├── param/                  # drive parameter YAML (e.g. MINAS)
+        ├── include/, src/           # C++ node
+        ├── scripts/                 # Python node entry scripts
+        └── launch/                  # joy, motor_manager_node, robot_manager_node
+```
 
-1. Read `ros2/motion_system_pkg/README.md` to see what runs at runtime.
-2. Read `lib/robot_manager/README.md` to understand action and gait logic.
-3. Read `lib/motor_manager/README.md` to understand low-level motor control.
-4. Read `common/common_robot_interface/README.md` and `common/common_motor_interface/README.md` for shared data contracts.
+| Area | Role |
+|------|------|
+| `common/*` | Language-specific shared types only; no ROS nodes. |
+| `lib/robot_manager/*` | Python robot behavior: config, schedulers, robot models, `RobotManager`. |
+| `lib/motor_manager/*` | C++ real-time motor stack: YAML-loaded masters/controllers/drivers. |
+| `ros2/motion_system_msgs` | Message schema for `motor_command` / `motor_state` topics. |
+| `ros2/motion_system_pkg` | Bridges ROS topics to `MotorManager` and runs teleop-side logic. |
 
-## How Data Moves Through The System
+Generated or local artifacts (`build/`, `install/`, `log/` under `lab_ws`, and `__pycache__`) are not shown; they are produced by the build, not source.
 
-1. Joystick publishes `joy`.
-2. `robot_manager_node.py` converts joystick state to high-level robot actions.
-3. Robot logic creates motion intent and motor command frames.
-4. `motor_manager_node` forwards commands into motor runtime and hardware.
-5. Hardware feedback is published as `motor_state`.
+---
 
-## Workspace Layout
+## API reference index
 
-- `common/common_robot_interface`: shared Python action/state/joystick types.
-- `common/common_motor_interface`: shared C++ motor frame types.
-- `lib/robot_manager`: Python robot behavior stack (manager + schedulers + robots).
-- `lib/motor_manager`: C++ motor runtime stack (interface + EtherCAT + driver + orchestrator).
-- `ros2/motion_system_msgs`: message definitions for motor frame transport.
-- `ros2/motion_system_pkg`: ROS nodes, launch files, runtime config.
+Package-level API references (classes, functions, constants, message fields):
 
-## Build And Run
+| Path | Reference |
+|------|-----------|
+| [common/common_robot_interface/README.md](common/common_robot_interface/README.md) | Python `Action`, `State`, joystick enums |
+| [common/common_motor_interface/README.md](common/common_motor_interface/README.md) | C++ `motor_frame_t`, `MAX_INTERFACE_SIZE` |
+| [lib/robot_manager/README.md](lib/robot_manager/README.md) | Robot manager stack entry |
+| [lib/motor_manager/README.md](lib/motor_manager/README.md) | Motor runtime stack entry |
+| [ros2/motion_system_msgs/README.md](ros2/motion_system_msgs/README.md) | ROS message field reference |
+| [ros2/motion_system_pkg/README.md](ros2/motion_system_pkg/README.md) | ROS nodes, launch arguments, scripts |
 
-From `lab_ws`:
+Build (from `lab_ws`):
 
 ```bash
 source /opt/ros/<distro>/setup.bash
 colcon build --symlink-install
 source install/setup.bash
 ```
-
-Run motor side first:
-
-```bash
-ros2 launch motion_system_pkg motion_system.launch.py
-```
-
-Run teleoperation side:
-
-```bash
-ros2 launch motion_system_pkg robot_manager_node.launch.py
-```
-
-## Dependencies
-
-- ROS 2
-- `yaml-cpp`
-- IgH EtherCAT `libethercat` (motor stack)
-- ROS `joy` package (teleoperation)

@@ -21,7 +21,15 @@ class FsmScheduler(Scheduler):
     def __init__(self, dt: float) -> None:
         super().__init__(dt)
 
-    def tick(self, action: Action) -> None:
+    def tick(self, action: Action) -> bool:
+        is_event = False
+        
         key = (self._current_state.kind, action.kind)
         next_kind = transition_table.get(key, self._current_state.kind)
+        
+        if next_kind != self._current_state.kind:
+            is_event = True
+
         self._current_state = State(kind=next_kind)
+
+        return is_event

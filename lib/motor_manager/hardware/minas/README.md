@@ -1,24 +1,28 @@
 # minas
 
-`minas` is the drive-specific layer for Panasonic MINAS style control behavior.
+Header: `include/minas/minas_driver.hpp`  
+Source: `src/minas_driver.cpp`  
+Namespace: `minas`
 
-## Main Component
+## Extra semantic IDs (`ID_MAX_TORQUE` … `ID_TXPDO`)
 
-- `MinasDriver` implements the `MotorDriver` contract.
+YAML-driven item ids for MINAS-specific objects (torque/position limits, profile parameters, RX/PDO group ids). See header for numeric values (50–58, 98–99).
 
-## What This Driver Handles
+## `class MinasDriver : motor_interface::MotorDriver`
 
-- Loads drive item/interface definitions from YAML.
-- Applies controlword/statusword-based enable and state checks.
-- Converts raw drive units into physical units used by `motor_frame_t`.
+Panasonic MINAS CiA402-style driver: parses parameter file, implements enable/disable/state checks, unit conversion.
 
-## Read This Code When
+### Constructor
 
-- You need to tune unit conversion behavior.
-- You want to change PDO/SDO item definitions.
-- Enable or command acceptance logic behaves unexpectedly.
+`explicit MinasDriver(const motor_interface::driver_config_t& config)`
 
-## Inputs
+### Overrides
 
-- Base driver config from system YAML
-- Optional `param_file` with detailed drive mapping/parameters
+| Method | Meaning |
+|--------|---------|
+| `loadParameters(const std::string& param_file)` | Populate `items_` / `interfaces_` and counts from YAML. |
+| `isEnabled` / `isDisabled` | Statusword/controlword state machine; update `DriverState` and output buffer. |
+| `isReceived` | Target-reached style check (raw buffer). |
+| `position` / `velocity` / `torque` | int16/32 ↔ double using `driver_config_t` scaling. |
+
+**Usage:** constructed by `MotorManager` when `drivers[].type` is `"minas"`; `param_file` is resolved relative to the main motor YAML directory before `loadParameters`.

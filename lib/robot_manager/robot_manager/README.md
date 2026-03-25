@@ -1,25 +1,32 @@
-# robot_manager
+# robot_manager package
 
-`robot_manager` is the application-facing Python package that turns joystick input and configuration into robot actions.
+This package is the integration point between input intent and concrete robot behavior.
 
-## Role
+## Main Responsibility
 
-- Loads robot configuration from YAML.
-- Selects a concrete robot class from a registry.
-- Converts joystick button/axis input into `Action` objects.
+- Load robot configuration from YAML.
+- Instantiate the proper robot implementation.
+- Convert joystick state into `Action` and forward it to the robot.
 
-## Main Class
+## Key Class
 
-- `RobotManager`
+- `RobotManager` in `src/robot_manager/robot_manager.py`
 
-## Key Behavior
+## How To Read The Code
 
-- Supports robot selection by config key (`little_reader`, `silver_lain`).
-- Uses button edges to switch between HOME/MOVE/WALK/STOP action modes.
-- In WALK mode, computes duration from stick magnitude and configured `stride_length`.
-- Exposes current robot state through `get_state()`.
+1. `_loadConfigurations`: config loading and defaults.
+2. `_robot_class_from_config`: robot selection logic.
+3. `joy_stick_command`: button-edge action switching and walk command generation.
+4. `get_state`: state passthrough from robot implementation.
 
-## Main Parameters
+## Action Mapping Summary
 
-- `config_file`: YAML path for robot, `dt`, and defaults
-- `stride_length`: optional override for walk duration scaling
+- Buttons switch action mode: HOME, MOVE, WALK, STOP.
+- WALK uses left/right stick axes and computes duration from `stride_length`.
+- Non-WALK actions are forwarded immediately as state-machine actions.
+
+## Configuration Keys
+
+- `robot`: robot type key such as `little_reader` or `silver_lain`
+- `dt`: scheduler tick period
+- `stride_length`: nominal stride distance used for walk duration

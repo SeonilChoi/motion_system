@@ -1,21 +1,21 @@
 # robot_interface
 
-`robot_interface` defines minimal abstract contracts for robot implementations and scheduler implementations.
+`robot_interface` is the abstract foundation for robot-side Python code.
 
-## Role
+## Why It Matters
 
-- Separates high-level orchestration from robot-specific logic.
-- Provides stable method signatures used by `robot_control` and `robot_manager`.
+- Defines contracts that all robot implementations must follow.
+- Lets `robot_manager` call robot code without knowing robot-specific details.
 
-## Main Interfaces
+## Interfaces
 
-- `Robot`: requires `get_state()` and `set_action(action)`
-- `Scheduler`: owns time state, reset behavior, and abstract `tick(action)`
+- `Robot`: base class with `get_state()` and `set_action(action)`.
+- `Scheduler`: base class with time/state ownership and `tick(action)`.
 
-## Shared Dependency
+## What Is Not Here
 
-- Uses `common_robot_interface` types (`Action`, `State`, enums).
+- No concrete transitions.
+- No gait policy.
+- No robot-specific implementation.
 
-## Scope
-
-No concrete gait/FSM policy is implemented here; this package is interface-only.
+Concrete behavior lives in `packages/robot_control`.

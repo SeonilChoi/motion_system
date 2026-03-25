@@ -1,25 +1,24 @@
 # ethercat
 
-`ethercat` implements the EtherCAT communication backend using the IgH EtherCAT Master API.
-
-## Role
-
-- Creates and manages EtherCAT master/domain objects.
-- Registers PDO/SDO entries from driver-provided maps.
-- Moves cyclic process data between EtherCAT memory and `motor_frame_t`.
+`ethercat` is the communication backend that connects the motor runtime to IgH EtherCAT Master.
 
 ## Main Components
 
-- `EthercatMaster`: lifecycle, domain processing, synchronization, transmit/receive
-- `EthercatController`: per-slave offsets, command write, state read, enable/disable checks
+- `EthercatMaster`: owns master/domain lifecycle and cycle-level send/receive.
+- `EthercatController`: handles per-slave process data mapping and read/write logic.
 
-## Runtime Flow
+## Cycle-Level Behavior
 
-- Initialize master and slave config
-- Receive/process domain data every cycle
-- Read status values into motor frames
-- Write command values from motor frames
-- Queue/send domain data and sync clocks
+1. Receive and process domain data.
+2. Read status values into `motor_frame_t`.
+3. Write command values from `motor_frame_t`.
+4. Queue/send domain data and perform clock sync.
+
+## Where To Debug
+
+- Communication init errors: master/domain setup path.
+- Wrong value mapping: controller offset/entry registration.
+- In-cycle sync issues: application time and clock sync calls.
 
 ## Dependencies
 

@@ -1,21 +1,30 @@
-# robot_manager (library tree)
+# robot_manager (Python stack)
 
-This tree contains the Python-side robot behavior stack for action scheduling and joystick-driven command generation.
+This tree implements high-level robot behavior, from action requests to scheduler-driven state transitions.
 
-## Role
+## Start Here
 
-- Defines abstract robot/scheduler interfaces.
-- Implements concrete schedulers and robot models.
-- Provides `RobotManager`, which maps joystick input to robot actions based on configuration.
+If you are trying to understand robot behavior quickly:
 
-## Submodules
+1. Read `robot_manager/README.md`.
+2. Read `packages/robot_control/README.md`.
+3. Read `core/robot_interface/README.md`.
 
-- `core/robot_interface`: abstract `Robot` and `Scheduler`
-- `packages/robot_control`: concrete schedulers and robot classes
-- `robot_manager`: integration layer that selects and drives robot instances
+## Architecture
 
-## Data Flow
+- `robot_manager`: top-level orchestrator that maps joystick input to `Action`.
+- `robot_control`: concrete schedulers and robot implementations.
+- `robot_interface`: abstract base contracts for robots and schedulers.
 
-- Joystick axes/buttons are converted into `Action`.
-- A selected robot implementation updates state through its scheduler.
-- Current `State` is exposed for external node code.
+## Core Flow
+
+1. `RobotManager` receives joystick/button state.
+2. It decides the current `ActionKind` and builds an `Action`.
+3. Selected robot class forwards action to scheduler.
+4. Scheduler updates and exposes `State`.
+
+## Where To Debug
+
+- Wrong state transitions: check `packages/robot_control/scheduler/*`.
+- Wrong robot class selected: check robot key handling in `robot_manager`.
+- Walk timing issues: check duration computation from `stride_length`.

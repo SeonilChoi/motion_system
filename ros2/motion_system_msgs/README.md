@@ -1,17 +1,22 @@
 # motion_system_msgs
 
-`motion_system_msgs` defines ROS 2 message types used to exchange motor command/state frames between runtime nodes.
+This package defines the ROS message schema for motor command and feedback transport.
 
-## Role
+## Why It Exists
 
-- Provides interface-only ROS message package for the motion system.
-- Keeps message definitions centralized so producers and consumers share one schema.
+- Keeps all motor message definitions in one place.
+- Prevents schema drift between publishers and subscribers.
 
-## Main Messages
+## Message Files
 
-- `MotorFrame.msg`
-- `MotorFrameMultiArray.msg`
+- `msg/MotorFrame.msg`: single motor frame payload.
+- `msg/MotorFrameMultiArray.msg`: grouped frames for multi-axis systems.
 
-## Usage
+## How To Use
 
-This package is a dependency of node packages such as `motion_system_pkg` and should be built before nodes that publish or subscribe to motor frame topics.
+- Add this package as a dependency in any ROS node package that publishes or subscribes to motor topics.
+- Build this package before runtime packages that import its message types.
+
+## When To Read This Package
+
+Read this package when topic serialization, field meaning, or message compatibility is in question.

@@ -1,18 +1,21 @@
 # common_motor_interface
 
-`common_motor_interface` is a shared C++ interface package that defines motor frame data structures used by the low-level motor stack.
+This package provides shared C++ frame structures used by motor runtime modules.
 
-## Role
+## Why It Exists
 
-- Provides canonical motor I/O types so communication, driver, and manager layers use the same memory layout.
-- Centralizes constants such as interface size limits to keep binary contracts consistent.
+- Keeps command and feedback memory layout consistent across all motor libraries.
+- Centralizes shared constants such as frame size limits.
 
-## Main Contents
+## Core File
 
 - `include/common_motor_interface/motor_frame.hpp`
-- `motor_frame_t` structure for command/state exchange
-- `MAX_INTERFACE_SIZE` and related shared definitions
 
-## Usage
+## Main Types
 
-This package is consumed by motor-side C++ libraries as a dependency and does not expose ROS nodes or runtime parameters by itself.
+- `motor_frame_t`
+- `MAX_INTERFACE_SIZE`
+
+## Scope
+
+This package is interface-only. It has no ROS node and no runtime loop.

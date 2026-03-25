@@ -1,22 +1,34 @@
-# motor_manager (library tree)
+# motor_manager (C++ stack)
 
-This tree contains the C++ motor runtime stack for communication, hardware driver handling, and real-time orchestration.
+This tree implements the low-level motor runtime that talks to hardware and executes periodic control cycles.
 
-## Role
+## Start Here
 
-- Implements deterministic motor control loop execution for configured masters and slaves.
-- Bridges YAML configuration into concrete communication and driver objects.
-- Exposes a unified command/state buffer model through motor frame types.
+Read in this order:
 
-## Submodules
+1. `motor_manager/README.md`
+2. `core/motor_interface/README.md`
+3. `communications/ethercat/README.md`
+4. `hardware/minas/README.md`
 
-- `core/motor_interface`: abstract interfaces and shared contracts
-- `communications/ethercat`: IgH EtherCAT master/controller implementation
-- `hardware/minas`: Minas drive-specific logic and conversion
-- `motor_manager`: top-level orchestrator library
+## Architecture
 
-## Build And Dependency Notes
+- `core/motor_interface`: abstract contracts and shared low-level types.
+- `communications/ethercat`: bus communication backend.
+- `hardware/minas`: drive-specific behavior and conversion.
+- `motor_manager`: orchestrates object construction and cyclic loop.
 
-- Built as `ament_cmake` C++17 libraries.
-- Requires `common_motor_interface`, `yaml-cpp`, and system `libethercat`.
-- This tree itself does not provide ROS nodes; ROS integration is done in `ros2/motion_system_pkg`.
+## Runtime Flow
+
+1. Load YAML configuration.
+2. Build masters, controllers, and drivers.
+3. Execute periodic receive/check/update/transmit loop.
+4. Expose thread-safe command and status frame buffers.
+
+## Dependencies
+
+- `common_motor_interface`
+- `yaml-cpp`
+- IgH EtherCAT `libethercat`
+
+ROS node wrappers that use this library live in `ros2/motion_system_pkg`.

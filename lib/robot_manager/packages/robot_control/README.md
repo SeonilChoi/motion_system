@@ -1,21 +1,28 @@
 # robot_control
 
-`robot_control` contains concrete robot behavior implementations built on top of `robot_interface`.
+This package contains concrete scheduler logic and robot model classes.
 
-## Role
+## What It Contains
 
-- Implements finite-state and gait-oriented schedulers.
-- Provides concrete robot classes that delegate action handling to schedulers.
+- `scheduler/fsm_scheduler.py`: finite state transitions for HOME/MOVE/STOP style actions.
+- `scheduler/gait_scheduler.py`: gait progress tracking with leg phase events.
+- `robots/little_reader.py`: robot wrapper using FSM scheduler.
+- `robots/silver_lain.py`: robot wrapper using gait scheduler and leg grouping.
 
-## Main Components
+## Recommended Reading Order
 
-- `scheduler/fsm_scheduler.py`: state transition scheduler for HOME/MOVE/STOP flows
-- `scheduler/gait_scheduler.py`: gait scheduler with progress tracking and per-leg events
-- `robots/little_reader.py`: robot using `FsmScheduler`
-- `robots/silver_lain.py`: robot using `GaitScheduler` with predefined leg groups
+1. `scheduler/fsm_scheduler.py`
+2. `scheduler/gait_scheduler.py`
+3. `robots/little_reader.py`
+4. `robots/silver_lain.py`
 
-## Behavior Highlights
+## Behavior Model
 
-- Scheduler transitions are driven by `ActionKind`.
-- Gait scheduler tracks progress and emits lift-off/touch-down events.
-- Robot classes expose state and accept actions through a uniform API.
+- Robot wrappers are thin adapters around scheduler instances.
+- Schedulers consume `Action` and update `State`.
+- Gait scheduler additionally tracks per-leg phase changes and event generation.
+
+## Debug Entry Points
+
+- Unexpected transition: verify transition tables in scheduler files.
+- Walk phase behavior: inspect progress, offsets, and event creation in gait scheduler.

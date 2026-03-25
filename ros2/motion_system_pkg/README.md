@@ -1,30 +1,40 @@
 # motion_system_pkg
 
-`motion_system_pkg` is the ROS 2 integration package that connects joystick input, robot action logic, and motor control runtime.
+`motion_system_pkg` is the runtime entry point of this workspace. If you want to run or debug the system, start here.
 
-## Role
+## What This Package Does
 
-- Provides executable nodes for runtime operation.
-- Declares launch files for motor control and teleoperation workflows.
-- Hosts default YAML configuration used by nodes.
+- Runs `motor_manager_node` for motor command execution and state publishing.
+- Runs `robot_manager_node.py` for joystick-to-action processing.
+- Provides launch files that connect both flows.
 
-## Main Executables
+## Runtime Model
 
-- `motor_manager_node`: bridges ROS topics to C++ motor manager runtime
-- `robot_manager_node.py`: reads `joy`, updates robot actions, and publishes motor commands
+- Input: `joy` (from `joy_node`)
+- Command channel: `motor_command`
+- Feedback channel: `motor_state`
 
-## Topics
+The typical direction is `joy -> robot_manager_node.py -> motor_command -> motor_manager_node -> motor_state`.
 
-- `motor_command`: command frames sent to motor manager side
-- `motor_state`: state frames published from motor manager side
-- `joy`: joystick input for teleoperation
+## Read Code In This Order
 
-## Launch Flow
+1. `scripts/robot_manager_node.py`
+2. `src/motor_manager_node.cpp`
+3. `launch/robot_manager_node.launch.py`
+4. `launch/motion_system.launch.py`
+5. `config/*.yaml`
 
-- Launch motor runtime first with motor configuration.
-- Launch joystick + robot manager teleoperation path after motor runtime is available.
+## Launch Sequence
+
+1. Start motor runtime with proper hardware config.
+2. Start robot manager and joystick.
 
 ## Important Parameters
 
-- `config_file`: node-specific YAML configuration path
-- `stride_length`: walk timing scale for robot-side action generation
+- `config_file`: selects YAML configuration file.
+- `stride_length`: affects walk duration in robot action generation.
+
+## Debug Tips
+
+- If no movement occurs, check whether `joy` is arriving and joystick mode is accepted.
+- If commands publish but hardware does not respond, verify `motor_manager_node` config and EtherCAT availability.

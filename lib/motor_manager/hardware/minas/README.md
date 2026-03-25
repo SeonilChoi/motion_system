@@ -1,24 +1,24 @@
 # minas
 
-`minas` provides a drive-specific implementation for Panasonic MINAS style servo control on top of the shared motor interface.
-
-## Role
-
-- Loads drive parameter definitions and interface maps from YAML.
-- Implements controlword/statusword state transitions for enable/disable and command acceptance.
-- Converts between raw drive units and physical units used in `motor_frame_t`.
+`minas` is the drive-specific layer for Panasonic MINAS style control behavior.
 
 ## Main Component
 
-- `MinasDriver`: implementation of `MotorDriver`
+- `MinasDriver` implements the `MotorDriver` contract.
 
-## Core Behavior
+## What This Driver Handles
 
-- Supplies PDO/SDO items used by communication layers
-- Handles CiA402-like state checks through controlword logic
-- Performs position/velocity/torque conversion using configured scale factors
+- Loads drive item/interface definitions from YAML.
+- Applies controlword/statusword-based enable and state checks.
+- Converts raw drive units into physical units used by `motor_frame_t`.
+
+## Read This Code When
+
+- You need to tune unit conversion behavior.
+- You want to change PDO/SDO item definitions.
+- Enable or command acceptance logic behaves unexpectedly.
 
 ## Inputs
 
-- Driver configuration from system YAML
-- Optional driver parameter YAML file referenced by `param_file`
+- Base driver config from system YAML
+- Optional `param_file` with detailed drive mapping/parameters

@@ -1,25 +1,27 @@
 # motor_manager library
 
-This module is the top-level orchestrator that builds configured masters, controllers, and drivers, then runs the periodic motor control loop.
-
-## Role
-
-- Parses system YAML and creates runtime objects.
-- Owns cyclic execution timing and synchronization sequence.
-- Exposes thread-safe command/state exchange APIs for external callers.
+This module is the top-level C++ orchestrator for low-level motor runtime execution.
 
 ## Main Class
 
 - `motor_manager::MotorManager`
 
-## Responsibilities
+## What It Does
 
-- Load `period`, masters, slaves, and driver definitions from YAML
-- Initialize communication and driver instances
-- Execute receive, enable/check, update, and transmit phases per cycle
-- Provide `write` and `read` APIs around `motor_frame_t` buffers
+- Reads system YAML and constructs masters, controllers, and drivers.
+- Runs the periodic motor cycle with deterministic timing.
+- Provides thread-safe `write` and `read` interfaces for command/state frames.
 
-## Notes
+## Runtime Sequence
 
-- Designed for deterministic periodic execution.
-- Used by ROS-side node wrappers in `ros2/motion_system_pkg`.
+1. Load configurations.
+2. Initialize all runtime objects.
+3. Start periodic loop.
+4. Perform receive, state check/enable, update, and transmit each tick.
+5. Stop cleanly and release resources.
+
+## Debug Focus
+
+- Startup issues: config parsing and object creation.
+- Runtime stability: loop timing and thread scheduling.
+- Command path issues: `write` update path and controller write logic.

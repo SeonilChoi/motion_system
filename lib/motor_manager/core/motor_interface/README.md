@@ -1,18 +1,16 @@
 # motor_interface
 
-`motor_interface` defines abstract C++ interfaces used by motor communication and hardware driver implementations.
+`motor_interface` defines the common C++ contracts that all motor communication and driver code must follow.
 
-## Role
+## What To Understand First
 
-- Provides base contracts for master, controller, and driver components.
-- Defines configuration structures and entry metadata shared across implementations.
-- Standardizes read/write/check behavior over `motor_frame_t`.
+- `MotorMaster`: cycle-level communication control.
+- `MotorController`: per-slave read/write/check behavior.
+- `MotorDriver`: device-specific mapping and conversion logic.
 
-## Main Interfaces
+## Why This Package Is Important
 
-- `MotorMaster`: bus-level lifecycle and cyclic transport hooks
-- `MotorController`: per-slave read/write/enable/check logic
-- `MotorDriver`: device-specific conversion, PDO/SDO mapping, and state checks
+Almost all low-level motor code depends on these abstractions. If behavior differs between implementations, this is the contract they should still satisfy.
 
 ## Key Shared Types
 
@@ -20,6 +18,6 @@
 - `entry_table_t`, `DataType`, `DriverState`
 - `motor_frame_t` from `common_motor_interface`
 
-## Scope
+## Practical Use
 
-This package is interface-focused and does not execute control loops directly.
+Use this package as a reference when adding a new communication backend or a new drive type.

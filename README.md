@@ -1,55 +1,49 @@
-# motion_system (ROS 2 workspace `src`)
+# motion_system workspace (`src`)
 
-Colcon packages under this tree:
+This workspace provides a ROS 2 based motion stack that separates low-level motor communication, shared interfaces, and high-level robot action scheduling.
 
-| Path | Package |
-|------|---------|
-| `common/common_motor_interface` | Shared `motor_frame_t` / `MAX_INTERFACE_SIZE` |
-| `lib/motor_manager` | EtherCAT + Minas `MotorManager` library (ament) |
-| `ros2/motion_system_msgs` | Message definitions |
-| `ros2/motion_system_pkg` | `motor_manager_node`, `robot_manager_node.py`, launches, config |
+## What Is In This Workspace
 
-Legacy copies at repo root (`motion_system_msgs/`, `motion_system_pkg/`) have `COLCON_IGNORE` so colcon does not see duplicate package names; remove those folders or the ignore files if you want only one layout.
+- `common/common_motor_interface`: shared C++ motor frame types used by the motor communication stack.
+- `common/common_robot_interface`: shared Python action/state/joystick enums used by robot-side logic.
+- `lib/motor_manager`: C++ motor runtime library for EtherCAT + drive handling.
+- `lib/robot_manager`: Python robot action orchestration and scheduler packages.
+- `ros2/motion_system_msgs`: ROS 2 message definitions for motor frames.
+- `ros2/motion_system_pkg`: ROS 2 nodes and launch files that connect joystick, robot manager, and motor manager.
 
-Build (from `lab_ws`):
+Legacy copies at repository root can be ignored when they include `COLCON_IGNORE`.
+
+## Build And Run
+
+From `lab_ws`:
 
 ```bash
 source /opt/ros/<distro>/setup.bash
 colcon build --symlink-install
 source install/setup.bash
+```
+
+Start motor control:
+
+```bash
 ros2 launch motion_system_pkg motion_system.launch.py
 ```
 
-Requires IgH EtherCAT Master (`libethercat`) and `yaml-cpp` on the system.
+Start joystick + robot manager:
 
-## `motion_system_pkg`
+```bash
+ros2 launch motion_system_pkg robot_manager_node.launch.py
+```
 
-### Nodes
+System dependencies include IgH EtherCAT Master (`libethercat`) and `yaml-cpp`. Teleoperation also requires ROS `joy`.
 
-| Executable | Role |
-|------------|------|
-| `motor_manager_node` | Subscribes to `motor_command`, publishes `motor_state` at 1 kHz; drives hardware from YAML `config_file`. |
-| `robot_manager_node.py` | Subscribes to `joy` and `motor_state`, publishes `motor_command` (stick axes → velocities; see script for mapping). |
+## Runtime Responsibilities
 
-### Topics
+- `motor_manager_node` consumes `motor_command`, drives hardware, and publishes `motor_state`.
+- `robot_manager_node.py` consumes `joy` and produces robot actions/motor commands through `RobotManager`.
+- `motion_system_msgs` defines the motor frame messages used between these nodes.
 
-| Name | Type | Direction (motor manager) |
-|------|------|-------------------------|
-| `motor_command` | `motion_system_msgs/msg/MotorFrameMultiArray` | In |
-| `motor_state` | `motion_system_msgs/msg/MotorFrameMultiArray` | Out |
-| `joy` | `sensor_msgs/msg/Joy` | Used by `robot_manager_node.py` only |
+## Main Runtime Parameters
 
-### Launches
-
-| File | Purpose |
-|------|---------|
-| `motion_system.launch.py` | `motor_manager_node` with `config_file` (default: share-installed `config/example.yaml`). |
-| `joy.launch.py` | `joy_node` only (`device_id`, `deadzone`, `autorepeat_rate` launch args). |
-| `teleop.launch.py` | Includes `joy.launch.py` plus `robot_manager_node.py`. Run `motion_system.launch.py` in another terminal first so `motor_state` exists. |
-
-Teleop depends on the ROS `joy` package (`sudo apt install ros-<distro>-joy` if missing).
-
-### `robot_manager_node.py` parameters
-
-- `config_file` (string): YAML for robot type, `dt`, `stride_length`, etc.
-- `stride_length` (float): nominal stride length for walk timing.
+- `motor_manager_node` uses a `config_file` parameter to load hardware and driver configuration.
+- `robot_manager_node.py` uses `config_file` and `stride_length` to choose robot model, loop timing, and walk timing behavior.

@@ -45,10 +45,11 @@ Requires IgH EtherCAT Master (`libethercat`) and `yaml-cpp` on the system.
 |------|---------|
 | `motion_system.launch.py` | `motor_manager_node` with `config_file` (default: share-installed `config/example.yaml`). |
 | `joy.launch.py` | `joy_node` only (`device_id`, `deadzone`, `autorepeat_rate` launch args). |
-| `teleop.launch.py` | Includes `joy.launch.py` plus `robot_manager_node.py` (`velocity_scale` arg). Run `motion_system.launch.py` in another terminal first so `motor_state` exists. |
+| `teleop.launch.py` | Includes `joy.launch.py` plus `robot_manager_node.py`. Run `motion_system.launch.py` in another terminal first so `motor_state` exists. |
 
 Teleop depends on the ROS `joy` package (`sudo apt install ros-<distro>-joy` if missing).
 
 ### `robot_manager_node.py` parameters
 
-- `velocity_scale` (float, default `1.0`): scales gamepad axes before writing motor velocities.
+- `config_file` (string): YAML for robot type, `dt`, `stride_length`, etc.
+- `stride_length` (float): nominal stride length for walk timing.

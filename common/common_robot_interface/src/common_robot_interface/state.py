@@ -18,3 +18,4 @@ class State:
     """Plain data record for the current state (struct-like)."""
 
     kind: StateKind
+    progress: float = 0.0

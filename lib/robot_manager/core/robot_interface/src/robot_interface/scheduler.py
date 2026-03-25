@@ -21,9 +21,6 @@ class Scheduler(ABC):
 
         self._current_state = State(kind=StateKind.STOPPED)
 
-    def step(self) -> None:
-        self._t += self._dt
-
     @abstractmethod
     def tick(self, action: Action) -> State:
         ...

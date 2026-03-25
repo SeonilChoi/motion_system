@@ -3,10 +3,9 @@
 from __future__ import annotations
 
 import copy
-from enum import Enum
 from typing import Dict
 
-from common_robot_interface import Action, ActionKind, StateKind
+from common_robot_interface import JoyAxes, JoyButton
 from robot_manager import RobotManager
 
 import rclpy
@@ -31,39 +30,19 @@ def _joy_qos() -> QoSProfile:
     )
 
 
-class JoyAxes(Enum):
-    LEFT_HORIZONTAL       = 0
-    LEFT_VERTICAL         = 1
-    LT                    = 2
-    RIGHT_HORIZONTAL      = 3
-    RIGHT_VERTICAL        = 4
-    RT                    = 5
-    LEFT_RIGHT_DIRECTION  = 6
-    UP_DOWN_DIRECTION     = 7
-
-
-class JoyButton(Enum):
-    A          = 0
-    B          = 1
-    X          = 2
-    Y          = 3
-    LB         = 4
-    RB         = 5
-    BACK       = 6
-    START      = 7
-    HOME       = 8
-    LEFT_AXES  = 9
-    RIGHT_AXES = 10
-
-
 class RobotManagerNode(Node):
     def __init__(self) -> None:
         super().__init__('robot_manager_node')
-        self.declare_parameter('velocity_scale', 1.0)
-        self._vel_scale = float(self.get_parameter('velocity_scale').value)
-
         self.declare_parameter('config_file', '')
         self._config_file = str(self.get_parameter('config_file').value)
+
+        self.declare_parameter('stride_length', 0.5)
+        self._stride_length = float(self.get_parameter('stride_length').value)
+
+        self._robot_manager = RobotManager(
+            self._config_file,
+            stride_length=self._stride_length,
+        )
 
         self._joy_sub = self.create_subscription(
             Joy,
@@ -86,11 +65,9 @@ class RobotManagerNode(Node):
         )
 
         self._timer = self.create_timer(
-            0.01,
+            self._robot_manager.dt,
             self._timer_callback,
         )
-
-        self._robot_manager = RobotManager(self._config_file)
 
         self._is_valid_joy_stick = False
 
@@ -99,15 +76,6 @@ class RobotManagerNode(Node):
         self._joy_buttons: Dict[JoyButton, bool] = {btn: False for btn in JoyButton}
 
         self._prev_joy_buttons: Dict[JoyButton, bool] = {btn: False for btn in JoyButton}
-
-        self._current_action_kind = ActionKind.STOP
-
-        self._joy_button_action_kind: Dict[JoyButton, ActionKind] = {
-            JoyButton.A: ActionKind.HOME,
-            JoyButton.B: ActionKind.MOVE,
-            JoyButton.X: ActionKind.WALK,
-            JoyButton.Y: ActionKind.STOP,
-        }
 
     def _check_joy_stick_mode(self, mode: float) -> None:
         if mode == 1:
@@ -132,22 +100,12 @@ class RobotManagerNode(Node):
         if self._is_valid_joy_stick is False:
             return
 
-        if self._robot_manager.get_current_state_kind() == StateKind.STOPPED:
-            self._current_action_kind = ActionKind.STOP
+        state = self._robot_manager.get_state()
+        self.get_logger().info(f"State: {state.kind}, {state.progress}")
 
-        self._current_action_kind = self._action_kind_from_button_edges()
-
-        self._robot_manager.submit_action(Action(kind=self._current_action_kind))
+        self._robot_manager.joy_stick_command(self._joy_axes, self._joy_buttons, self._prev_joy_buttons)
 
         self._prev_joy_buttons = copy.deepcopy(self._joy_buttons)
-
-        self.get_logger().info(f"Current state kind: {self._robot_manager.get_current_state_kind()}")
-
-    def _action_kind_from_button_edges(self) -> ActionKind:
-        for btn, kind in self._joy_button_action_kind.items():
-            if self._joy_buttons[btn] and not self._prev_joy_buttons[btn]:
-                return kind
-        return self._current_action_kind
 
 
 def main() -> None:

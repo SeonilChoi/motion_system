@@ -1,19 +1,29 @@
 from __future__ import annotations
 
-from common_robot_interface import Action, State
+from common_robot_interface import Action, ActionKind, State
 
 from robot_interface.robot import Robot
 
 from robot_control.scheduler.gait_scheduler import GaitScheduler
 
 
+LEG_GROUP_A = [0, 2, 4]
+LEG_GROUP_B = [1, 3, 5]
+
 class SilverLain(Robot):
     def __init__(self, dt: float = 0.01) -> None:
         super().__init__(dt)
-        self._scheduler = GaitScheduler(dt)
+        
+        self._scheduler = GaitScheduler(dt, LEG_GROUP_A, LEG_GROUP_B)
 
     def get_state(self) -> State:
         return self._scheduler.current_state
 
+    def get_events(self) -> List[Event]:
+        return self._scheduler.events
+
     def set_action(self, action: Action) -> None:
         self._scheduler.tick(action)
+        
+        if action.kind == ActionKind.WALK and action.duration != 0.0:
+            self._scheduler.step()

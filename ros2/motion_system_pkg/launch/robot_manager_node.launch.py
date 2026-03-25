@@ -28,15 +28,15 @@ def generate_launch_description():
         default_value='20.0',
         description='Autorepeat rate (Hz) for joy_node.',
     )
-    velocity_scale_arg = DeclareLaunchArgument(
-        'velocity_scale',
-        default_value='1.0',
-        description='Scales stick axes -> motor velocity in robot_manager_node.',
-    )
     config_file_arg = DeclareLaunchArgument(
         'config_file',
-        default_value=os.path.join(pkg_share, 'config', 'little_reader.yaml'),
-        description='YAML for robot_manager_node (keys: robot, dt).',
+        default_value=os.path.join(pkg_share, 'config', 'silver_lain.yaml'),
+        description='YAML for robot_manager_node (keys: robot, dt, stride_length, …).',
+    )
+    stride_length_arg = DeclareLaunchArgument(
+        'stride_length',
+        default_value='0.1',
+        description='Nominal stride length (m) for walk duration = stick speed / stride_length.',
     )
 
     joy_launch = IncludeLaunchDescription(
@@ -56,8 +56,8 @@ def generate_launch_description():
         name='robot_manager_node',
         output='screen',
         parameters=[{
-            'velocity_scale': LaunchConfiguration('velocity_scale'),
             'config_file': LaunchConfiguration('config_file'),
+            'stride_length': LaunchConfiguration('stride_length'),
         }],
     )
 
@@ -65,8 +65,8 @@ def generate_launch_description():
         device_id_arg,
         deadzone_arg,
         autorepeat_arg,
-        velocity_scale_arg,
         config_file_arg,
+        stride_length_arg,
         joy_launch,
         robot_manager,
     ])

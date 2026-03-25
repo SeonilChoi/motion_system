@@ -90,7 +90,7 @@ class RobotManagerNode(Node):
             self._timer_callback,
         )
 
-        self._robot = RobotManager(self._config_file)
+        self._robot_manager = RobotManager(self._config_file)
 
         self._is_valid_joy_stick = False
 
@@ -132,16 +132,16 @@ class RobotManagerNode(Node):
         if self._is_valid_joy_stick is False:
             return
 
-        if self._robot.current_state_kind == StateKind.STOPPED:
+        if self._robot_manager.get_current_state_kind() == StateKind.STOPPED:
             self._current_action_kind = ActionKind.STOP
 
         self._current_action_kind = self._action_kind_from_button_edges()
 
-        self._robot.submit_action(Action(kind=self._current_action_kind))
+        self._robot_manager.submit_action(Action(kind=self._current_action_kind))
 
         self._prev_joy_buttons = copy.deepcopy(self._joy_buttons)
 
-        self.get_logger().info(f"Current state kind: {self._robot.current_state_kind}")
+        self.get_logger().info(f"Current state kind: {self._robot_manager.get_current_state_kind()}")
 
     def _action_kind_from_button_edges(self) -> ActionKind:
         for btn, kind in self._joy_button_action_kind.items():

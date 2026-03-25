@@ -33,6 +33,11 @@ def generate_launch_description():
         default_value='1.0',
         description='Scales stick axes -> motor velocity in robot_manager_node.',
     )
+    config_file_arg = DeclareLaunchArgument(
+        'config_file',
+        default_value=os.path.join(pkg_share, 'config', 'little_reader.yaml'),
+        description='YAML for robot_manager_node (keys: robot, dt).',
+    )
 
     joy_launch = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -52,6 +57,7 @@ def generate_launch_description():
         output='screen',
         parameters=[{
             'velocity_scale': LaunchConfiguration('velocity_scale'),
+            'config_file': LaunchConfiguration('config_file'),
         }],
     )
 
@@ -60,6 +66,7 @@ def generate_launch_description():
         deadzone_arg,
         autorepeat_arg,
         velocity_scale_arg,
+        config_file_arg,
         joy_launch,
         robot_manager,
     ])

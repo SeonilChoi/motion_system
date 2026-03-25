@@ -1,0 +1,5 @@
+# RobotManager — scheduler / implementation selection (not motor_ethercat config).
+# See also: config/ethercat_minas.yaml (motor_manager).
+
+robot: little_reader
+dt: 0.01

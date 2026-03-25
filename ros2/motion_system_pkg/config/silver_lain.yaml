@@ -1,0 +1,4 @@
+# Example: SilverLain uses GaitScheduler (includes walk-related FSM transitions).
+
+robot: silver_lain
+dt: 0.01

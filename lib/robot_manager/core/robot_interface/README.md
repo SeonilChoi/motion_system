@@ -2,69 +2,44 @@
 
 Python package: `robot_interface`. Source: `src/robot_interface/`.
 
-## `__init__.py`
-
-**`__all__`:** `Robot` — re-exported from `robot.py`.
-
 ## `robot.py`
 
 ### `class Robot(ABC)`
 
-Abstract robot facade: timestep, optional per-robot `stride_length`, `StateFrame` readout, and `ActionFrame` injection.
+Base abstraction for each robot instance.
 
 #### Constructor
 
-`__init__(self, dt: float = 0.01, stride_length: float = 0.0) -> None`
-
-| Attribute | Meaning |
-|-----------|---------|
-| `_dt` | Scheduler step period (seconds). |
-| `_stride_length` | Nominal stride (meters) for teleop walk timing; exposed via property. |
+`__init__(self, robot_id: int, dt: float = 0.01, stride_length: float = 0.0, controller_indexes: Optional[list[int]] = None)`
 
 #### Properties
 
-| Property | Type | Meaning |
-|----------|------|---------|
-| `stride_length` | `float` | Value passed at construction (from YAML per robot in `RobotManager`). |
+| Property | Type |
+|----------|------|
+| `robot_id` | `int` |
+| `stride_length` | `float` |
+| `controller_indexes` | `Optional[list[int]]` |
 
-#### Methods
+#### Abstract methods
 
-| Method | Signature | Meaning |
-|--------|-----------|---------|
-| `get_state` | `() -> StateFrame` | Current `StateFrame` from the concrete robot (usually `scheduler.current_state`). |
-| `set_action` | `(frame: ActionFrame) -> None` | Apply one command frame (drives `Scheduler.tick` in implementations). |
-
-**Subclassing:** implement `get_state` and `set_action`.
-
----
+| Method | Signature |
+|--------|-----------|
+| `get_robot_state` | `() -> Optional[RobotState]` |
+| `set_joint_state` | `(joint_states: JointState) -> None` |
+| `get_state` | `() -> StateFrame` |
+| `set_action` | `(frame: ActionFrame) -> None` |
 
 ## `scheduler.py`
 
 ### `class Scheduler(ABC)`
 
-Abstract scheduler: owns simulated time, current `StateFrame`, and reset behavior.
+Base scheduler with current high-level state.
 
-#### Constructor
+- `_current_state` initial value: `StateFrame(state=State.STOPPED, progress=0.0)`
+- `reset()` restores `_t = 0.0` and stopped state.
 
-`__init__(self, dt: float) -> None`
+#### Abstract method
 
-| Attribute | Initial value | Meaning |
-|-----------|---------------|---------|
-| `_dt` | `dt` | Tick duration (seconds). |
-| `_t` | `0.0` | Internal time accumulator (`GaitScheduler`). |
-| `_current_state` | `StateFrame(state=State.STOPPED, progress=0.0)` | Last computed state. |
-
-#### Properties
-
-| Property | Type | Meaning |
-|----------|------|---------|
-| `current_state` | `StateFrame` | Read-only view of `_current_state`. |
-
-#### Methods
-
-| Method | Signature | Meaning |
-|--------|-----------|---------|
-| `reset` | `() -> None` | Set `_t` to `0.0` and `_current_state` to stopped. |
-| `tick` | `(frame: ActionFrame) -> bool` | Abstract: advance one step. Implementations return whether the **state enum** changed this tick (`FsmScheduler`, `GaitScheduler`). |
-
-**Subclassing:** implement `tick`.
+| Method | Signature |
+|--------|-----------|
+| `tick` | `(frame: ActionFrame) -> bool` |

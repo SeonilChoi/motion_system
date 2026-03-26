@@ -15,6 +15,14 @@ Python package: `robot_control`. Schedulers and concrete robots.
 
 **`__all__`:** `LittleReader`, `SilverLain`.
 
+## `planner/__init__.py`
+
+Exports `GaitTrajectoryPlanner`.
+
+## `kinematics/__init__.py`
+
+Exports `SilverLainSolver`.
+
 ---
 
 ## `scheduler/fsm_scheduler.py`
@@ -112,7 +120,12 @@ Walk-capable scheduler with per-leg phase offsets and contact events.
 | `get_state` | Returns `_scheduler.current_state` (`StateFrame`). |
 | `set_action` | `_scheduler.tick(frame)`. |
 
-`__init__(self, dt: float = 0.01)` — `super().__init__(dt)`; no stride semantics in FSM.
+`__init__(self, robot_id=0, dt=0.01, stride_length=0.0, controller_indexes=None)`.
+
+Additional methods:
+
+- `get_robot_state() -> Optional[RobotState]` returns `None` (no geometric state yet)
+- `set_joint_state(joint_states: JointState)` stores latest feedback
 
 ---
 
@@ -136,4 +149,13 @@ Walk-capable scheduler with per-leg phase offsets and contact events.
 | `get_state` | Returns `_scheduler.current_state`. |
 | `set_action` | `tick(frame)`; placeholder branches for `HOME` / `MOVE` / `STOP` / `WALK` events; if `WALK` and `frame.duration != 0`, calls `_scheduler.step()`. |
 
-`__init__(self, dt: float = 0.01, stride_length: float = 0.0)` — passes `stride_length` to `Robot` base for teleop duration scaling in the node.
+`__init__(self, robot_id=0, dt=0.01, stride_length=0.0, controller_indexes=None)`:
+
+- builds `GaitScheduler`, `GaitTrajectoryPlanner`, `SilverLainSolver`
+- stores latest `JointState`
+- computes and updates `RobotState.pose.points` on `set_joint_state`
+
+Extra methods:
+
+- `get_robot_state() -> RobotState`
+- `set_joint_state(joint_states: JointState) -> None`

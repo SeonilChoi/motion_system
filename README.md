@@ -48,7 +48,7 @@ Package-level API references (classes, functions, constants, message fields):
 
 | Path | Reference |
 |------|-----------|
-| [common/common_robot_interface/README.md](common/common_robot_interface/README.md) | Python `Action`, `ActionFrame`, `State`, `StateFrame`; `joint.JointState` |
+| [common/common_robot_interface/README.md](common/common_robot_interface/README.md) | Python `Action`, `ActionFrame`, `JointState`, `State`, `StateFrame` |
 | [common/common_motor_interface/README.md](common/common_motor_interface/README.md) | C++ `motor_frame_t`, `MAX_INTERFACE_SIZE` |
 | [lib/robot_manager/README.md](lib/robot_manager/README.md) | Robot manager stack entry |
 | [lib/motor_manager/README.md](lib/motor_manager/README.md) | Motor runtime stack entry |

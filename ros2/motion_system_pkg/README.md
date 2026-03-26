@@ -83,6 +83,8 @@ ROS node `robot_manager_node`.
 | `_robot_manager` | `RobotManager(_config_file)`. |
 | `_selected_robot_id` | Index of the robot receiving button-driven `ActionFrame` updates (0 … `number_of_robots - 1`). |
 | `_number_of_robots` | `self._robot_manager.number_of_robots`. |
+| `_number_of_motors` | `self._robot_manager.number_of_motors`. |
+| `_joint_states` | Global `JointState` buffers sized by `_number_of_motors`. |
 | `_curr_action` | `list[ActionFrame]`, one per robot; passed to `set_action` each timer tick. |
 | `_joy_sub` | Subscription to `joy`. |
 | `_motor_state_sub` | Subscription to `motor_state` (`motor_state_callback` currently no-op). |
@@ -99,9 +101,9 @@ ROS node `robot_manager_node`.
 |--------|---------|
 | `_check_joy_stick_mode(mode: float)` | If `mode == 1`, sets `_is_valid_joy_stick` and logs. |
 | `_select_robot(up_down: float)` | Changes `_selected_robot_id` from `UP_DOWN_DIRECTION` axis edge (wraps modulo `number_of_robots`). |
-| `motor_state_callback(msg)` | Placeholder (`pass`); commented joint-state example retained. |
+| `motor_state_callback(msg)` | Copies `msg.data[i]` into `_joint_states` arrays and forwards via `RobotManager.set_joint_states`. |
 | `joy_callback(msg)` | Until valid, uses `LEFT_RIGHT_DIRECTION` axis for `_check_joy_stick_mode` then returns. Then copies all axes/buttons into dicts. |
-| `timer_callback` | If joystick invalid, return. On `UP_DOWN_DIRECTION` edge, `_select_robot`. Logs selected robot `StateFrame`. If selected robot `state == State.STOPPED`, sets that slot to `ActionFrame(action=Action.STOP)`. On rising edge of mapped button, sets `ActionFrame(action=…)`. If selected frame is `WALK`, recomputes `duration` from stick magnitude and **`RobotManager.stride_length(selected_id)`**, updates `goal` from sticks. Calls `set_action(_curr_action)`. Deep-copies axes/buttons to `_prev_*`. |
+| `timer_callback` | If joystick invalid, return. On `UP_DOWN_DIRECTION` edge, `_select_robot`. Logs selected `StateFrame` and each robot's `get_robot_states(robot_id).pose.points`. If selected robot `state == State.STOPPED`, sets selected action to STOP. Handles button rising-edge action latch, computes walk duration/goal, dispatches `set_action(_curr_action)`, then snapshots previous joystick states. |
 
 ### `def main() -> None`
 
@@ -140,6 +142,11 @@ Starts `joy` package `joy_node`.
 | `stride_length` | `'0.1'` | Passed as a **node parameter** in launch; the current `robot_manager_node.py` **does not declare or read** it—effective stride comes from each robot entry in YAML (`Robot.stride_length` / `RobotManager.stride_length(robot_id)`). |
 
 Includes `joy.launch.py` and starts `robot_manager_node.py` with `parameters` for `config_file` and `stride_length` (the latter reserved for future use unless wired in the node).
+
+## Helper scripts
+
+- `scripts/pub_motor_state_once.sh`: one-shot `/motor_state` publisher for quick tests.
+- `publish_motor_state_once.sh` (workspace root): continuous `/motor_state` publisher (~1 kHz) with position ramp `-pi/2 -> +pi/2`.
 
 ---
 

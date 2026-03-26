@@ -5,61 +5,71 @@ Python package: `common_robot_interface`. Source: `src/common_robot_interface/`.
 ## Module `common_robot_interface` (`__init__.py`)
 
 **Exports (`__all__`)**  
-`Action`, `ActionKind`, `JoyAxes`, `JoyButton`, `State`, `StateKind`
+`Action`, `ActionFrame`, `JoyAxes`, `JoyButton`, `State`, `StateFrame`
 
 **Usage**
 
 ```python
-from common_robot_interface import Action, ActionKind, State, StateKind, JoyAxes, JoyButton
+from common_robot_interface import Action, ActionFrame, State, StateFrame, JoyAxes, JoyButton
 ```
 
 ---
 
 ## `action.py`
 
-### `class ActionKind(Enum)`
+### `class Action(Enum)`
+
+High-level command **kind** (not a dataclass). Used inside `ActionFrame.action` and in FSM transition tables together with `State`.
 
 | Member | Meaning |
 |--------|---------|
-| `HOME` | Request or run homing-related action. |
-| `MOVE` | Request or run generic move / operate action. |
-| `WALK` | Request or run walking gait action. |
-| `STOP` | Request or run stop action. |
+| `HOME` | Homing-related command. |
+| `MOVE` | Generic operate / move command. |
+| `WALK` | Walking gait command (`duration` / `goal` on the frame matter for `GaitScheduler`). |
+| `STOP` | Stop / idle command. |
 
-### `@dataclass(frozen=True, slots=True) class Action`
+### `@dataclass(frozen=True, slots=True) class ActionFrame`
+
+One logical command sample: **kind** plus optional timing and goal vector (ROS / teleop boundary type).
 
 | Field | Type | Default | Meaning |
 |-------|------|---------|---------|
-| `kind` | `ActionKind` | (required) | Active action kind. |
-| `duration` | `float` | `0.0` | Walk segment duration (seconds); used when `kind` is `WALK`. |
-| `goal` | `np.ndarray` | `zeros(3)` | Walk direction / goal vector; indices `0,1` used as `vx, vy` from joystick in `RobotManager`. |
+| `action` | `Action` | (required) | Command kind. |
+| `duration` | `float` | `0.0` | Walk segment duration (seconds) when `action` is `WALK`. |
+| `goal` | `np.ndarray` | `zeros(3)` | Direction / goal; e.g. `vx, vy` from joystick in `robot_manager_node`. |
 
 **Construction**
 
 ```python
-Action(kind=ActionKind.STOP)
-Action(kind=ActionKind.WALK, duration=2.0, goal=np.array([1.0, 0.0, 0.0]))
+ActionFrame(action=Action.STOP)
+ActionFrame(action=Action.WALK, duration=2.0, goal=np.array([1.0, 0.0, 0.0]))
 ```
+
+`Robot.set_action` and `Scheduler.tick` take an `ActionFrame` end-to-end.
 
 ---
 
 ## `state.py`
 
-### `class StateKind(Enum)`
+### `class State(Enum)`
+
+High-level **motion / mode** state. Used inside `StateFrame.state` and in scheduler transition tables.
 
 | Member | Meaning |
 |--------|---------|
-| `HOMMING` | Robot in homing. |
-| `OPERATING` | Robot in non-walk operating mode. |
-| `WALKING` | Robot in walk gait. |
-| `STOPPED` | Robot stopped / idle. |
+| `HOMMING` | Homing. |
+| `OPERATING` | Non-walk operating. |
+| `WALKING` | Walk gait active. |
+| `STOPPED` | Stopped / idle. |
 
-### `@dataclass(frozen=True, slots=True) class State`
+### `@dataclass(frozen=True, slots=True) class StateFrame`
+
+Published scheduler state: enum **state** plus scalar **progress**.
 
 | Field | Type | Default | Meaning |
 |-------|------|---------|---------|
-| `kind` | `StateKind` | (required) | Current high-level state. |
-| `progress` | `float` | `0.0` | Gait or motion progress in `[0, 1]` when applicable (`GaitScheduler`). |
+| `state` | `State` | (required) | Current high-level state. |
+| `progress` | `float` | `0.0` | Gait progress in `[0, 1]` when applicable (`GaitScheduler`). |
 
 ---
 
@@ -81,6 +91,8 @@ Maps logical axes to indices into `sensor_msgs/msg/Joy.axes`.
 | `UP_DOWN_DIRECTION` | 7 |
 
 **Usage:** `msg.axes[JoyAxes.LEFT_VERTICAL.value]`
+
+> **Note:** `scripts/robot_manager_node.py` currently defines **local** `JoyAxes` / `JoyButton` enums with the same axis/button indices so the node stays self-contained; you may switch it to import these from `common_robot_interface` if you prefer a single definition.
 
 ### `class JoyButton(Enum)`
 

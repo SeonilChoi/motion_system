@@ -13,7 +13,7 @@ ROS 2 package: nodes, launch files, and scripts bridging joystick → robot logi
 #### Type alias
 
 | Name | Definition |
-|------|--------------|
+|------|------------|
 | `MotorFrameMultiArray` | `motion_system_msgs::msg::MotorFrameMultiArray` |
 
 #### Constructor
@@ -58,11 +58,15 @@ Calls `motor_manager_->request_stop()` and joins `manager_run_thread_`.
 
 ### `def _motor_qos() -> QoSProfile`
 
-Returns QoS: depth 1, best effort, keep last — used for motor topics.
+QoS: depth 1, best effort, keep last — motor topics.
 
 ### `def _joy_qos() -> QoSProfile`
 
 Same pattern for `joy` subscription.
+
+### Module-local enums
+
+The script defines **`JoyAxes`** and **`JoyButton`** (same indices as `common_robot_interface.joy`) so axis/button mapping stays local to the node. Types from `common_robot_interface` used here: **`Action`** (enum), **`ActionFrame`**, **`State`** (enum).
 
 ### `class RobotManagerNode(Node)`
 
@@ -73,27 +77,31 @@ ROS node `robot_manager_node`.
 | Parameter (declare) | Default | Stored attribute | Meaning |
 |---------------------|---------|------------------|---------|
 | `config_file` | `''` | `_config_file` | Path to robot YAML for `RobotManager`. |
-| `stride_length` | `0.5` | `_stride_length` | Overrides walk stride if set. |
 
 | Attribute | Meaning |
 |-----------|---------|
-| `_robot_manager` | `RobotManager(config_file, stride_length=...)`. |
+| `_robot_manager` | `RobotManager(_config_file)`. |
+| `_selected_robot_id` | Index of the robot receiving button-driven `ActionFrame` updates (0 … `number_of_robots - 1`). |
+| `_number_of_robots` | `self._robot_manager.number_of_robots`. |
+| `_curr_action` | `list[ActionFrame]`, one per robot; passed to `set_action` each timer tick. |
 | `_joy_sub` | Subscription to `joy`. |
-| `_motor_state_sub` | Subscription to `motor_state` (callback is no-op). |
-| `_motor_cmd_pub` | Publisher `motor_command` *(declared; not used in current script body)*. |
-| `_timer` | Periodic timer with period `self._robot_manager.dt` → `_timer_callback`. |
+| `_motor_state_sub` | Subscription to `motor_state` (`motor_state_callback` currently no-op). |
+| `_motor_cmd_pub` | Publisher `motor_command` *(declared; unused in current script body)*. |
+| `_timer` | Period `self._robot_manager.dt` → `timer_callback`. |
 | `_is_valid_joy_stick` | `False` until mode check passes. |
-| `_joy_axes` | `dict[JoyAxes, float]` zero-initialized. |
+| `_joy_axes`, `_prev_joy_axes` | `dict[JoyAxes, float]`. |
 | `_joy_buttons`, `_prev_joy_buttons` | `dict[JoyButton, bool]` for edge detection. |
+| `_joy_button_action` | `JoyButton` → **`Action`** enum: A→HOME, B→MOVE, X→WALK, Y→STOP. |
 
 #### Methods
 
 | Method | Meaning |
 |--------|---------|
-| `_check_joy_stick_mode(mode: float)` | If `mode == 1`, sets `_is_valid_joy_stick` True and logs. |
-| `_motor_state_callback(msg)` | Placeholder (`pass`). |
-| `_joy_callback(msg)` | Until valid, checks `msg.axes[JoyAxes.LEFT_RIGHT_DIRECTION.value]` via `_check_joy_stick_mode` and returns. Then copies all axes/buttons into dicts. |
-| `_timer_callback` | If joystick invalid, return. Logs state; calls `joy_stick_command`; deep-copies buttons to `_prev_joy_buttons`. |
+| `_check_joy_stick_mode(mode: float)` | If `mode == 1`, sets `_is_valid_joy_stick` and logs. |
+| `_select_robot(up_down: float)` | Changes `_selected_robot_id` from `UP_DOWN_DIRECTION` axis edge (wraps modulo `number_of_robots`). |
+| `motor_state_callback(msg)` | Placeholder (`pass`); commented joint-state example retained. |
+| `joy_callback(msg)` | Until valid, uses `LEFT_RIGHT_DIRECTION` axis for `_check_joy_stick_mode` then returns. Then copies all axes/buttons into dicts. |
+| `timer_callback` | If joystick invalid, return. On `UP_DOWN_DIRECTION` edge, `_select_robot`. Logs selected robot `StateFrame`. If selected robot `state == State.STOPPED`, sets that slot to `ActionFrame(action=Action.STOP)`. On rising edge of mapped button, sets `ActionFrame(action=…)`. If selected frame is `WALK`, recomputes `duration` from stick magnitude and **`RobotManager.stride_length(selected_id)`**, updates `goal` from sticks. Calls `set_action(_curr_action)`. Deep-copies axes/buttons to `_prev_*`. |
 
 ### `def main() -> None`
 
@@ -128,10 +136,10 @@ Starts `joy` package `joy_node`.
 | `device_id` | `'0'` | Joystick index for included `joy.launch.py`. |
 | `deadzone` | `'0.05'` | Axis deadzone. |
 | `autorepeat_rate` | `'20.0'` | Autorepeat Hz. |
-| `config_file` | `share/.../config/silver_lain.yaml` | Robot manager YAML. |
-| `stride_length` | `'0.1'` | Walk stride parameter. |
+| `config_file` | `share/.../config/silver_lain.yaml` | Robot YAML (`robots`, `dt`, per-row `stride_length`, …). |
+| `stride_length` | `'0.1'` | Passed as a **node parameter** in launch; the current `robot_manager_node.py` **does not declare or read** it—effective stride comes from each robot entry in YAML (`Robot.stride_length` / `RobotManager.stride_length(robot_id)`). |
 
-Includes `joy.launch.py` and starts `robot_manager_node.py` with `config_file` and `stride_length`.
+Includes `joy.launch.py` and starts `robot_manager_node.py` with `parameters` for `config_file` and `stride_length` (the latter reserved for future use unless wired in the node).
 
 ---
 

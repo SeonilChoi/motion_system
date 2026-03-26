@@ -10,7 +10,7 @@ Python package: `robot_manager`. Source: `src/robot_manager/robot_manager.py`.
 
 ### `_ROBOT_BY_KEY: dict[str, type[Robot]]`
 
-Maps YAML/config string `robot` (normalized) to a concrete `Robot` subclass.
+Maps YAML string `robot` (normalized: lower case, spaces → `_`) to a concrete `Robot` subclass.
 
 | Key | Class |
 |-----|-------|
@@ -19,48 +19,69 @@ Maps YAML/config string `robot` (normalized) to a concrete `Robot` subclass.
 
 Unknown keys fall back to `LittleReader`.
 
+### `_robot_class_for_key(key: str) -> type[Robot]`
+
+Looks up `_ROBOT_BY_KEY` with normalized `key`.
+
 ---
 
 ## `class RobotManager`
 
-Loads YAML config, constructs the selected `Robot`, maps joystick edges to `Action`, and forwards walk vectors.
+Loads YAML, builds **one `Robot` per `robots` list entry**, and exposes multi-robot `get_state` / `set_action` / `stride_length`.
 
 ### Constructor
 
-`__init__(self, config_file: str, *, stride_length: float | None = None) -> None`
+`__init__(self, config_file: str) -> None`
 
 | Parameter | Meaning |
 |-----------|---------|
-| `config_file` | Path to YAML; if missing or invalid, internal config stays empty and defaults apply. |
-| `stride_length` | If not `None`, overrides `stride_length` from file after load. |
+| `config_file` | Path to YAML. If missing or not a file, `_config` stays `{}` and defaults apply where coded. |
 
-| Private attribute | Meaning |
-|-------------------|---------|
-| `_config` | Parsed mapping from YAML. |
-| `_robot` | Instance of selected `Robot`. |
-| `_current_action_kind` | Last latched `ActionKind` from buttons or stop logic. |
-| `_joy_button_action_kind` | Maps `JoyButton` → `ActionKind` (A→HOME, B→MOVE, X→WALK, Y→STOP). |
+| Attribute | Meaning |
+|-----------|---------|
+| `_config` | Parsed root mapping from YAML. |
+| `_dt` | `float(self._config.get('dt', 0.01))`. |
+| `_number_of_robots` | From `number_of_robots` key until `_build_robots` runs; **overwritten** when a `robots` list is used (see below). |
+| `_robots` | `list[Robot]` instances. |
 
 ### Properties
 
 | Property | Type | Meaning |
 |----------|------|---------|
-| `dt` | `float` | From `_config['dt']`, default `0.01`. |
-| `stride_length` | `float` | From `_config['stride_length']`, default `0.5`; clamped to `0.5` if `<= 0`. |
+| `dt` | `float` | Control period for timers (`robot_manager_node`). |
+| `number_of_robots` | `int` | `len(_robots)` after build. |
 
 ### Methods
 
 | Method | Signature | Meaning |
 |--------|-----------|---------|
-| `get_state` | `() -> State` | Delegates to `self._robot.get_state()`. |
-| `joy_stick_command` | `(axes: dict[JoyAxes, float], button: dict[JoyButton, bool], prev_button: dict[JoyButton, bool]) -> None` | If robot state is `STOPPED`, forces `_current_action_kind` to `STOP`. On rising edge of a mapped button, sets action kind. Non-`WALK`: `set_action(Action(kind=...))`. `WALK`: builds `goal` from `LEFT_VERTICAL` and `RIGHT_HORIZONTAL`, computes `duration` from stick magnitude and `stride_length`, then `set_action` with `ActionKind.WALK`. |
-| `_loadConfigurations` | `(config_file: str) -> None` | Loads YAML into `_config` if path exists and root is a `Mapping`. |
-| `_robot_class_from_config` | `() -> type[Robot]` | Reads `_config['robot']`, normalizes string, returns class from `_ROBOT_BY_KEY` or `LittleReader`. |
+| `get_state` | `(robot_id: int) -> StateFrame` | `self._robots[robot_id].get_state()`. |
+| `set_action` | `(action_frame_list: list[ActionFrame]) -> None` | For each index `i`, `self._robots[i].set_action(frame)` while `i < len(_robots)`. |
+| `stride_length` | `(robot_id: int) -> float` | `self._robots[robot_id].stride_length`. |
+| `_loadConfigurations` | `(config_file: str) -> None` | `yaml.safe_load` into `_config` if path is a file and root is a `Mapping`. |
+| `_build_robots` | `() -> None` | If `robots` is a non-empty `list`, instantiates one robot per element (see YAML). Otherwise `_robots` is left empty in the current implementation—prefer a non-empty `robots` list in config. |
 
-### YAML keys (read by this class)
+### YAML layout (supported)
 
-| Key | Type | Role |
-|-----|------|------|
-| `robot` | `str` | Robot type key (`little_reader`, `silver_lain`, …). |
-| `dt` | number | Tick period for robot construction. |
-| `stride_length` | number | Nominal stride for walk duration computation. |
+**Multi-robot (recommended)** — list order is `robot_id` **0, 1, …** (the optional `id` field is documentation only; not used for ordering).
+
+```yaml
+dt: 0.01
+number_of_robots: 2   # informational; count follows len(robots) when `robots` is set
+
+robots:
+  - id: 0
+    robot: silver_lain
+    stride_length: 0.1
+  - id: 1
+    robot: little_reader
+    stride_length: 0.0
+```
+
+| Key (root) | Type | Role |
+|------------|------|------|
+| `dt` | number | Passed as `dt=` to each `Robot`. |
+| `number_of_robots` | int | Initial value before build; when `robots` exists, `_number_of_robots` becomes `len(robots)`. |
+| `robots` | list | Each item: at least `robot` (string); optional `stride_length` (number) passed to `Robot(..., stride_length=...)`. |
+
+Joystick → `ActionFrame` mapping lives in **`motion_system_pkg` / `robot_manager_node`**, not in `RobotManager`.

@@ -5,13 +5,15 @@ Python package: `common_robot_interface`. Source: `src/common_robot_interface/`.
 ## Module `common_robot_interface` (`__init__.py`)
 
 **Exports (`__all__`)**  
-`Action`, `ActionFrame`, `JoyAxes`, `JoyButton`, `State`, `StateFrame`
+`Action`, `ActionFrame`, `State`, `StateFrame`
 
 **Usage**
 
 ```python
-from common_robot_interface import Action, ActionFrame, State, StateFrame, JoyAxes, JoyButton
+from common_robot_interface import Action, ActionFrame, State, StateFrame
 ```
+
+Joystick axis/button indices are **not** defined in this package; `motion_system_pkg/scripts/robot_manager_node.py` defines local `JoyAxes` / `JoyButton` enums for `sensor_msgs/Joy`.
 
 ---
 
@@ -36,7 +38,7 @@ One logical command sample: **kind** plus optional timing and goal vector (ROS /
 |-------|------|---------|---------|
 | `action` | `Action` | (required) | Command kind. |
 | `duration` | `float` | `0.0` | Walk segment duration (seconds) when `action` is `WALK`. |
-| `goal` | `np.ndarray` | `zeros(3)` | Direction / goal; e.g. `vx, vy` from joystick in `robot_manager_node`. |
+| `goal` | `np.ndarray` | `zeros(3)` | Direction / goal; e.g. `vx, vy` from teleop in `robot_manager_node`. |
 
 **Construction**
 
@@ -73,36 +75,22 @@ Published scheduler state: enum **state** plus scalar **progress**.
 
 ---
 
-## `joy.py`
+## `joint.py`
 
-### `class JoyAxes(Enum)`
+Not re-exported from `__init__.py` today; import the submodule when needed:
 
-Maps logical axes to indices into `sensor_msgs/msg/Joy.axes`.
+```python
+from common_robot_interface.joint import JointState
+```
 
-| Member | Value |
-|--------|-------|
-| `LEFT_HORIZONTAL` | 0 |
-| `LEFT_VERTICAL` | 1 |
-| `LT` | 2 |
-| `RIGHT_HORIZONTAL` | 3 |
-| `RIGHT_VERTICAL` | 4 |
-| `RT` | 5 |
-| `LEFT_RIGHT_DIRECTION` | 6 |
-| `UP_DOWN_DIRECTION` | 7 |
+### `@dataclass(frozen=True, slots=True) class JointState`
 
-**Usage:** `msg.axes[JoyAxes.LEFT_VERTICAL.value]`
-
-> **Note:** `scripts/robot_manager_node.py` currently defines **local** `JoyAxes` / `JoyButton` enums with the same axis/button indices so the node stays self-contained; you may switch it to import these from `common_robot_interface` if you prefer a single definition.
-
-### `class JoyButton(Enum)`
-
-Maps logical buttons to indices into `sensor_msgs/msg/Joy.buttons`.
-
-| Member | Value |
-|--------|-------|
-| `A` … `RIGHT_AXES` | 0 … 10 |
-
-**Usage:** `msg.buttons[JoyButton.A.value]`
+| Field | Type | Meaning |
+|-------|------|---------|
+| `motor_id` | `np.ndarray` | Controller / motor indices. |
+| `position` | `np.ndarray` | Positions. |
+| `velocity` | `np.ndarray` | Velocities. |
+| `torque` | `np.ndarray` | Torques. |
 
 ---
 

@@ -66,7 +66,7 @@ Same pattern for `joy` subscription.
 
 ### Module-local enums
 
-The script defines **`JoyAxes`** and **`JoyButton`** (same indices as `common_robot_interface.joy`) so axis/button mapping stays local to the node. Types from `common_robot_interface` used here: **`Action`** (enum), **`ActionFrame`**, **`State`** (enum).
+The script defines **`JoyAxes`** and **`JoyButton`** enums for `sensor_msgs/Joy` indices (not part of `common_robot_interface`). Types from `common_robot_interface`: **`Action`** (enum), **`ActionFrame`**, **`State`** (enum).
 
 ### `class RobotManagerNode(Node)`
 

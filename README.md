@@ -8,7 +8,7 @@ Top-level directories under this `src` tree (colcon packages live here):
 src/
 ├── README.md
 ├── common/
-│   ├── common_robot_interface/     # ament_python: Action, ActionFrame, State, StateFrame, Joy
+│   ├── common_robot_interface/     # ament_python: Action, ActionFrame, State, StateFrame (+ joint.py)
 │   └── common_motor_interface/     # ament_cmake: shared C++ motor_frame_t header
 ├── lib/
 │   ├── robot_manager/              # ament_cmake wrapper + nested Python packages
@@ -48,7 +48,7 @@ Package-level API references (classes, functions, constants, message fields):
 
 | Path | Reference |
 |------|-----------|
-| [common/common_robot_interface/README.md](common/common_robot_interface/README.md) | Python `Action`, `ActionFrame`, `State`, `StateFrame`, joystick enums |
+| [common/common_robot_interface/README.md](common/common_robot_interface/README.md) | Python `Action`, `ActionFrame`, `State`, `StateFrame`; `joint.JointState` |
 | [common/common_motor_interface/README.md](common/common_motor_interface/README.md) | C++ `motor_frame_t`, `MAX_INTERFACE_SIZE` |
 | [lib/robot_manager/README.md](lib/robot_manager/README.md) | Robot manager stack entry |
 | [lib/motor_manager/README.md](lib/motor_manager/README.md) | Motor runtime stack entry |

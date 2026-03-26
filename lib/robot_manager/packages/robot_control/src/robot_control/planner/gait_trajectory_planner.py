@@ -10,6 +10,7 @@ class GaitTrajectoryPlanner(TrajectoryPlanner):
         super().__init__()
         self._duration : float = None
         self._clearance : float = None
+        
 
     def set_parameters(
         self,

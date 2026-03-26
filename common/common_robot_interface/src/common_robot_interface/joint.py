@@ -8,5 +8,5 @@ import numpy as np
 class JointState:
     motor_id: np.ndarray
     position: np.ndarray
-    velocity: np.ndarray
+    velocity: np.ndarray     
     torque: np.ndarray

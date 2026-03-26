@@ -8,7 +8,7 @@ from enum import Enum
 
 import numpy as np
 
-from common_robot_interface import Action, ActionFrame, State
+from common_robot_interface import Action, ActionFrame, State, JointState
 from robot_manager import RobotManager
 
 import rclpy
@@ -49,7 +49,6 @@ def _motor_qos() -> QoSProfile:
         history=QoSHistoryPolicy.KEEP_LAST,
     )
 
-
 def _joy_qos() -> QoSProfile:
     return QoSProfile(
         depth=1,
@@ -68,6 +67,7 @@ class RobotManagerNode(Node):
         self._robot_manager: RobotManager = RobotManager(self._config_file)
         self._selected_robot_id: int = 0
         self._number_of_robots: int = self._robot_manager.number_of_robots
+        self._number_of_motors: int = self._robot_manager.number_of_motors
 
         # JoyStick Variables
         self._is_valid_joy_stick: bool = False
@@ -81,6 +81,14 @@ class RobotManagerNode(Node):
             JoyButton.X: Action.WALK,
             JoyButton.Y: Action.STOP,
         }
+
+        # Joint State Variables
+        self._joint_states: JointState = JointState(
+            motor_id=np.zeros(self._number_of_motors, dtype=np.int32),
+            position=np.zeros(self._number_of_motors, dtype=np.float64),
+            velocity=np.zeros(self._number_of_motors, dtype=np.float64),
+            torque=np.zeros(self._number_of_motors, dtype=np.float64),
+        )
 
         # Scheduler Variables
         self._curr_action: List[ActionFrame] = [
@@ -126,8 +134,6 @@ class RobotManagerNode(Node):
 
 
     def motor_state_callback(self, msg: MotorFrameMultiArray) -> None:
-        pass
-        """
         for i in range(self._number_of_motors):
             self._joint_states.motor_id[i] = msg.data[i].controller_index
             self._joint_states.position[i] = msg.data[i].position
@@ -135,7 +141,6 @@ class RobotManagerNode(Node):
             self._joint_states.torque[i] = msg.data[i].torque
 
         self._robot_manager.set_joint_states(self._joint_states)
-        """
 
     def joy_callback(self, msg: Joy) -> None:
         if self._is_valid_joy_stick is False:
@@ -155,9 +160,11 @@ class RobotManagerNode(Node):
         if self._joy_axes[JoyAxes.UP_DOWN_DIRECTION] != 0.0 and self._prev_joy_axes[JoyAxes.UP_DOWN_DIRECTION] == 0.0:
             self._select_robot(self._joy_axes[JoyAxes.UP_DOWN_DIRECTION])
 
-        self.get_logger().info(
-            f"Selected robot ID: {self._selected_robot_id}, State: {self._robot_manager.get_state(self._selected_robot_id).state}, Progress: {self._robot_manager.get_state(self._selected_robot_id).progress}"
-        )
+        self.get_logger().info(f"Selected robot ID: {self._selected_robot_id}, State: {self._robot_manager.get_state(self._selected_robot_id).state}, Progress: {self._robot_manager.get_state(self._selected_robot_id).progress}")
+        for robot_id in range(self._number_of_robots):
+            self.get_logger().info(f"Robot {robot_id}: points: {self._robot_manager.get_robot_states(robot_id).pose.points}")
+
+
         if self._robot_manager.get_state(self._selected_robot_id).state == State.STOPPED:
             self._curr_action[self._selected_robot_id] = ActionFrame(action=Action.STOP)
 
@@ -186,6 +193,7 @@ class RobotManagerNode(Node):
 
         self._prev_joy_axes = copy.deepcopy(self._joy_axes)
         self._prev_joy_buttons = copy.deepcopy(self._joy_buttons)
+
 
 def main() -> None:
     rclpy.init()

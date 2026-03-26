@@ -18,7 +18,7 @@ MotorManagerNode::MotorManagerNode(const rclcpp::NodeOptions& options)
     );
 
     motor_state_publisher_ = this->create_publisher<MotorFrameMultiArray>(
-        "motor_state", rclcpp::QoS(10).best_effort()
+        "motor_state", rclcpp::QoS(1).best_effort()
     );
 
     motor_state_timer_ = this->create_wall_timer(

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, List, Mapping
+from typing import Any, List, Mapping, Optional
 
+import numpy as np
 import yaml
 
 from common_robot_interface import ActionFrame, StateFrame
+from common_robot_interface.joint import JointState
 from robot_interface.robot import Robot
 
 from robot_control.robots.little_reader import LittleReader
@@ -21,18 +23,24 @@ _ROBOT_BY_KEY: dict[str, type[Robot]] = {
 def _robot_class_for_key(key: str) -> type[Robot]:
     return _ROBOT_BY_KEY.get(key.lower().replace(' ', '_'), LittleReader)
 
+def _as_controller_indexes(value: Any) -> Optional[list[int]]:
+    if value is None:
+        return None
+    if isinstance(value, (list, tuple)):
+        return [int(x) for x in value]
+    return None
+
 
 class RobotManager:
     def __init__(self, config_file: str) -> None:
         self._loadConfigurations(config_file)
 
-        # Robot Manager Variables
+        self._number_of_motors: int = 0
         self._dt = float(self._config.get('dt', 0.01))
         self._number_of_robots = int(self._config.get('number_of_robots', 1))
         self._robots: List[Robot] = []
 
         self._build_robots()
-
 
     @property
     def dt(self) -> float:
@@ -42,6 +50,9 @@ class RobotManager:
     def number_of_robots(self) -> int:
         return self._number_of_robots
 
+    @property
+    def number_of_motors(self) -> int:
+        return self._number_of_motors
 
     def _loadConfigurations(self, config_file: str) -> None:
         self._config: dict[str, Any] = {}
@@ -60,16 +71,23 @@ class RobotManager:
         c, dt = self._config, self._dt
         rows = c.get('robots')
         if isinstance(rows, list) and rows:
-            self._robots = [
-                _robot_class_for_key(str(dict(r).get('robot', 'little_reader')))(
-                    dt=dt,
-                    stride_length=dict(r).get('stride_length', 0.0)
+            self._robots = []
+            for r in rows:
+                row = dict(r)
+                cls = _robot_class_for_key(str(row.get('robot', 'little_reader')))
+                rid = int(row.get('id', 0))
+                stride = float(row.get('stride_length', 0.0))
+                ctrl = _as_controller_indexes(row.get('controller_indexes'))
+                self._robots.append(
+                    cls(
+                        robot_id=rid,
+                        dt=dt,
+                        stride_length=stride,
+                        controller_indexes=ctrl)
                 )
-                for r in rows
-            ]
+                self._number_of_motors += len(ctrl)
             self._number_of_robots = len(self._robots)
             return
-
 
     def stride_length(self, robot_id: int) -> float:
         return self._robots[robot_id].stride_length
@@ -82,3 +100,20 @@ class RobotManager:
             if robot_id >= len(self._robots):
                 break
             self._robots[robot_id].set_action(frame)
+
+    def get_robot_states(self, robot_id: int) -> RobotState:
+        return self._robots[robot_id].get_robot_state()
+
+    def set_joint_states(self, joint_states: JointState) -> None:
+        for robot in self._robots:
+            idx = robot.controller_indexes
+            if not idx:
+                continue
+            sel = np.asarray(idx, dtype=int)
+            sub = JointState(
+                motor_id=joint_states.motor_id[sel],
+                position=joint_states.position[sel],
+                velocity=joint_states.velocity[sel],
+                torque=joint_states.torque[sel],
+            )
+            robot.set_joint_state(sub)

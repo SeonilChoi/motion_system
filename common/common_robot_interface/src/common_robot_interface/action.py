@@ -5,9 +5,8 @@ from enum import Enum, auto
 
 import numpy as np
 
-class ActionKind(Enum):
-    """Which robot action is requested or running."""
 
+class Action(Enum):
     HOME = auto()
     MOVE = auto()
     WALK = auto()
@@ -15,9 +14,7 @@ class ActionKind(Enum):
 
 
 @dataclass(frozen=True, slots=True)
-class Action:
-    """Plain data record for the current action (struct-like)."""
-
-    kind: ActionKind
+class ActionFrame:
+    action: Action
     duration: float = 0.0
     goal: np.ndarray = field(default_factory=lambda: np.zeros(3, dtype=float))

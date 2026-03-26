@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from common_robot_interface import Action, State
+from common_robot_interface import ActionFrame, StateFrame
 
 from robot_interface.robot import Robot
 
@@ -12,8 +12,8 @@ class LittleReader(Robot):
         super().__init__(dt)
         self._scheduler = FsmScheduler(dt)
 
-    def get_state(self) -> State:
+    def get_state(self) -> StateFrame:
         return self._scheduler.current_state
 
-    def set_action(self, action: Action) -> None:
-        self._scheduler.tick(action)
+    def set_action(self, frame: ActionFrame) -> None:
+        self._scheduler.tick(frame)

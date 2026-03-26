@@ -1,16 +1,16 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any, List, Mapping
 
-import numpy as np
 import yaml
 
-from common_robot_interface import Action, ActionKind, StateKind, JoyAxes, JoyButton
+from common_robot_interface import ActionFrame, StateFrame
 from robot_interface.robot import Robot
 
 from robot_control.robots.little_reader import LittleReader
 from robot_control.robots.silver_lain import SilverLain
+
 
 _ROBOT_BY_KEY: dict[str, type[Robot]] = {
     'little_reader': LittleReader,
@@ -18,73 +18,33 @@ _ROBOT_BY_KEY: dict[str, type[Robot]] = {
 }
 
 
+def _robot_class_for_key(key: str) -> type[Robot]:
+    return _ROBOT_BY_KEY.get(key.lower().replace(' ', '_'), LittleReader)
+
+
 class RobotManager:
-    def __init__(
-        self,
-        config_file: str,
-        *,
-        stride_length: float | None = None,
-    ) -> None:
-        self._config: dict[str, Any] = {}
+    def __init__(self, config_file: str) -> None:
         self._loadConfigurations(config_file)
-        if stride_length is not None:
-            self._config['stride_length'] = float(stride_length)
 
-        robot_cls = self._robot_class_from_config()
-        dt = self.dt
-        self._robot: Robot = robot_cls(dt=dt)
-        self._current_action_kind = ActionKind.STOP
+        # Robot Manager Variables
+        self._dt = float(self._config.get('dt', 0.01))
+        self._number_of_robots = int(self._config.get('number_of_robots', 1))
+        self._robots: List[Robot] = []
 
-        self._joy_button_action_kind: dict[JoyButton, ActionKind] = {
-            JoyButton.A: ActionKind.HOME,
-            JoyButton.B: ActionKind.MOVE,
-            JoyButton.X: ActionKind.WALK,
-            JoyButton.Y: ActionKind.STOP,
-        }
+        self._build_robots()
+
 
     @property
     def dt(self) -> float:
-        return float(self._config.get('dt', 0.01))
+        return self._dt
 
     @property
-    def stride_length(self) -> float:
-        v = float(self._config.get('stride_length', 0.5))
-        return v if v > 0.0 else 0.5
+    def number_of_robots(self) -> int:
+        return self._number_of_robots
 
-    def get_state(self) -> State:
-        return self._robot.get_state()
-
-    def joy_stick_command(
-        self,
-        axes: dict[JoyAxes, float],
-        button: dict[JoyButton, bool],
-        prev_button: dict[JoyButton, bool],
-    ) -> None:
-        if self._robot.get_state().kind == StateKind.STOPPED:
-            self._current_action_kind = ActionKind.STOP
-
-        for btn, kind in self._joy_button_action_kind.items():
-            if button[btn] and not prev_button[btn]:
-                self._current_action_kind = kind
-                break
-        
-        if self._current_action_kind != ActionKind.WALK:
-            self._robot.set_action(Action(kind=self._current_action_kind))
-        else:
-            vx = axes[JoyAxes.LEFT_VERTICAL]
-            vy = axes[JoyAxes.RIGHT_HORIZONTAL]
-
-            norm = np.sqrt(vx**2 + vy**2)
-            if norm == 0.0:
-                duration = 0.0
-            else:
-                speed = (norm / np.sqrt(2)) * 0.05 # 0.05 is the maximum speed
-                duration = self.stride_length / speed
-
-            self._robot.set_action(Action(kind=ActionKind.WALK, duration=duration, goal=np.array([vx, vy, 0.0])))
 
     def _loadConfigurations(self, config_file: str) -> None:
-        self._config = {}
+        self._config: dict[str, Any] = {}
         path = Path((config_file or '').strip()).expanduser()
         if not path.is_file():
             return
@@ -96,6 +56,29 @@ class RobotManager:
             return
         self._config = dict(loaded)
 
-    def _robot_class_from_config(self) -> type[Robot]:
-        key = str(self._config.get('robot', 'little_reader')).lower().replace(' ', '_')
-        return _ROBOT_BY_KEY.get(key, LittleReader)
+    def _build_robots(self) -> None:
+        c, dt = self._config, self._dt
+        rows = c.get('robots')
+        if isinstance(rows, list) and rows:
+            self._robots = [
+                _robot_class_for_key(str(dict(r).get('robot', 'little_reader')))(
+                    dt=dt,
+                    stride_length=dict(r).get('stride_length', 0.0)
+                )
+                for r in rows
+            ]
+            self._number_of_robots = len(self._robots)
+            return
+
+
+    def stride_length(self, robot_id: int) -> float:
+        return self._robots[robot_id].stride_length
+
+    def get_state(self, robot_id: int) -> StateFrame:
+        return self._robots[robot_id].get_state()
+
+    def set_action(self, action_frame_list: List[ActionFrame]) -> None:
+        for robot_id, frame in enumerate(action_frame_list):
+            if robot_id >= len(self._robots):
+                break
+            self._robots[robot_id].set_action(frame)

@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import copy
-from typing import Dict
+from typing import Dict, List
+from enum import Enum
 
-from common_robot_interface import JoyAxes, JoyButton
+import numpy as np
+
+from common_robot_interface import Action, ActionFrame, State
 from robot_manager import RobotManager
 
 import rclpy
@@ -13,6 +16,31 @@ from rclpy.node import Node
 from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import Joy
 from motion_system_msgs.msg import MotorFrameMultiArray
+
+
+class JoyAxes(Enum):
+    LEFT_HORIZONTAL       = 0
+    LEFT_VERTICAL         = 1
+    LT                    = 2
+    RIGHT_HORIZONTAL      = 3
+    RIGHT_VERTICAL        = 4
+    RT                    = 5
+    LEFT_RIGHT_DIRECTION  = 6
+    UP_DOWN_DIRECTION     = 7
+
+class JoyButton(Enum):
+    A          = 0
+    B          = 1
+    X          = 2
+    Y          = 3
+    LB         = 4
+    RB         = 5
+    BACK       = 6
+    START      = 7
+    HOME       = 8
+    LEFT_AXES  = 9
+    RIGHT_AXES = 10
+
 
 def _motor_qos() -> QoSProfile:
     return QoSProfile(
@@ -36,25 +64,40 @@ class RobotManagerNode(Node):
         self.declare_parameter('config_file', '')
         self._config_file = str(self.get_parameter('config_file').value)
 
-        self.declare_parameter('stride_length', 0.5)
-        self._stride_length = float(self.get_parameter('stride_length').value)
+        # Robot Manager Variables
+        self._robot_manager: RobotManager = RobotManager(self._config_file)
+        self._selected_robot_id: int = 0
+        self._number_of_robots: int = self._robot_manager.number_of_robots
 
-        self._robot_manager = RobotManager(
-            self._config_file,
-            stride_length=self._stride_length,
-        )
+        # JoyStick Variables
+        self._is_valid_joy_stick: bool = False
+        self._joy_axes: Dict[JoyAxes, float] = {axes: 0.0 for axes in JoyAxes}
+        self._joy_buttons: Dict[JoyButton, bool] = {btn: False for btn in JoyButton}
+        self._prev_joy_axes: Dict[JoyAxes, float] = {axes: 0.0 for axes in JoyAxes}
+        self._prev_joy_buttons: Dict[JoyButton, bool] = {btn: False for btn in JoyButton}
+        self._joy_button_action: dict[JoyButton, Action] = {
+            JoyButton.A: Action.HOME,
+            JoyButton.B: Action.MOVE,
+            JoyButton.X: Action.WALK,
+            JoyButton.Y: Action.STOP,
+        }
+
+        # Scheduler Variables
+        self._curr_action: List[ActionFrame] = [
+            ActionFrame(action=Action.STOP) for _ in range(self._number_of_robots)
+        ]
 
         self._joy_sub = self.create_subscription(
             Joy,
             'joy',
-            self._joy_callback,
+            self.joy_callback,
             _joy_qos(),
         )      
 
         self._motor_state_sub = self.create_subscription(
             MotorFrameMultiArray,
             'motor_state',
-            self._motor_state_callback,
+            self.motor_state_callback,
             _motor_qos(),
         )
 
@@ -66,26 +109,35 @@ class RobotManagerNode(Node):
 
         self._timer = self.create_timer(
             self._robot_manager.dt,
-            self._timer_callback,
+            self.timer_callback,
         )
 
-        self._is_valid_joy_stick = False
-
-        self._joy_axes: Dict[JoyAxes, float] = {axes: 0.0 for axes in JoyAxes}
-
-        self._joy_buttons: Dict[JoyButton, bool] = {btn: False for btn in JoyButton}
-
-        self._prev_joy_buttons: Dict[JoyButton, bool] = {btn: False for btn in JoyButton}
 
     def _check_joy_stick_mode(self, mode: float) -> None:
         if mode == 1:
             self._is_valid_joy_stick = True
             self.get_logger().info("Joy stick mode is valid")
 
-    def _motor_state_callback(self, msg: MotorFrameMultiArray) -> None:
-        pass
+    def _select_robot(self, up_down: float) -> None:
+        self._selected_robot_id = (self._selected_robot_id + int(up_down)) % self._number_of_robots
+        if self._selected_robot_id < 0:
+            self._selected_robot_id = self._number_of_robots - 1
+        self.get_logger().info(f"Selected robot ID: {self._selected_robot_id}")
 
-    def _joy_callback(self, msg: Joy) -> None:
+
+    def motor_state_callback(self, msg: MotorFrameMultiArray) -> None:
+        pass
+        """
+        for i in range(self._number_of_motors):
+            self._joint_states.motor_id[i] = msg.data[i].controller_index
+            self._joint_states.position[i] = msg.data[i].position
+            self._joint_states.velocity[i] = msg.data[i].velocity
+            self._joint_states.torque[i] = msg.data[i].torque
+
+        self._robot_manager.set_joint_states(self._joint_states)
+        """
+
+    def joy_callback(self, msg: Joy) -> None:
         if self._is_valid_joy_stick is False:
             self._check_joy_stick_mode(msg.axes[JoyAxes.LEFT_RIGHT_DIRECTION.value])
             return
@@ -96,17 +148,44 @@ class RobotManagerNode(Node):
         for btn in JoyButton:
             self._joy_buttons[btn] = msg.buttons[btn.value]
 
-    def _timer_callback(self) -> None:
+    def timer_callback(self) -> None:
         if self._is_valid_joy_stick is False:
             return
+        
+        if self._joy_axes[JoyAxes.UP_DOWN_DIRECTION] != 0.0 and self._prev_joy_axes[JoyAxes.UP_DOWN_DIRECTION] == 0.0:
+            self._select_robot(self._joy_axes[JoyAxes.UP_DOWN_DIRECTION])
 
-        state = self._robot_manager.get_state()
-        self.get_logger().info(f"State: {state.kind}, {state.progress}")
+        self.get_logger().info(
+            f"Selected robot ID: {self._selected_robot_id}, State: {self._robot_manager.get_state(self._selected_robot_id).state}, Progress: {self._robot_manager.get_state(self._selected_robot_id).progress}"
+        )
+        if self._robot_manager.get_state(self._selected_robot_id).state == State.STOPPED:
+            self._curr_action[self._selected_robot_id] = ActionFrame(action=Action.STOP)
 
-        self._robot_manager.joy_stick_command(self._joy_axes, self._joy_buttons, self._prev_joy_buttons)
+        for btn, action in self._joy_button_action.items():
+            if self._joy_buttons[btn] and not self._prev_joy_buttons[btn]:
+                self._curr_action[self._selected_robot_id] = ActionFrame(action=action)
+                break
 
+        if self._curr_action[self._selected_robot_id].action == Action.WALK:
+            vx = self._joy_axes[JoyAxes.LEFT_VERTICAL]
+            vy = self._joy_axes[JoyAxes.RIGHT_HORIZONTAL]
+
+            norm = np.sqrt(vx**2 + vy**2)
+            if norm == 0.0:
+                duration = 0.0
+            else:
+                speed = (norm / np.sqrt(2)) * 0.05 # 0.05 is the maximum speed
+                duration = self._robot_manager.stride_length(self._selected_robot_id) / speed
+            self._curr_action[self._selected_robot_id] = ActionFrame(
+                action=Action.WALK,
+                duration=duration,
+                goal=np.array([vx, vy, 0.0]),
+            )
+
+        self._robot_manager.set_action(self._curr_action)
+
+        self._prev_joy_axes = copy.deepcopy(self._joy_axes)
         self._prev_joy_buttons = copy.deepcopy(self._joy_buttons)
-
 
 def main() -> None:
     rclpy.init()

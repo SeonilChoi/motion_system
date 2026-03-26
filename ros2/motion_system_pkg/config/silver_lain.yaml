@@ -1,4 +1,13 @@
 # Example: SilverLain uses GaitScheduler (includes walk-related FSM transitions).
 
-robot: silver_lain
 dt: 0.01
+
+number_of_robots: 2
+
+robots:
+  - id: 0
+    robot: silver_lain
+    stride_length: 0.1
+  - id: 1
+    robot: silver_lain
+    stride_length: 0.15

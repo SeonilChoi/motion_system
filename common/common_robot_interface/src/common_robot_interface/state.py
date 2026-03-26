@@ -4,9 +4,7 @@ from dataclasses import dataclass
 from enum import Enum, auto
 
 
-class StateKind(Enum):
-    """Which robot state is requested or running."""
-
+class State(Enum):
     HOMMING = auto()
     OPERATING = auto()
     WALKING = auto()
@@ -14,8 +12,6 @@ class StateKind(Enum):
 
 
 @dataclass(frozen=True, slots=True)
-class State:
-    """Plain data record for the current state (struct-like)."""
-
-    kind: StateKind
+class StateFrame:
+    state: State
     progress: float = 0.0

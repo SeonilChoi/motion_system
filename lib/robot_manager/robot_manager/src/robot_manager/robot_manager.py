@@ -42,6 +42,7 @@ class RobotManager:
 
         self._build_robots()
 
+
     @property
     def dt(self) -> float:
         return self._dt
@@ -53,6 +54,7 @@ class RobotManager:
     @property
     def number_of_motors(self) -> int:
         return self._number_of_motors
+
 
     def _loadConfigurations(self, config_file: str) -> None:
         self._config: dict[str, Any] = {}
@@ -83,14 +85,15 @@ class RobotManager:
                         robot_id=rid,
                         dt=dt,
                         stride_length=stride,
-                        controller_indexes=ctrl)
+                        clearance=float(row.get('clearance', 0.05)),
+                        controller_indexes=ctrl,
+                        home_joint_positions=row.get('home_joint_positions'),
+                    )
                 )
-                self._number_of_motors += len(ctrl)
+                self._number_of_motors += len(ctrl) if ctrl else 0
             self._number_of_robots = len(self._robots)
             return
 
-    def stride_length(self, robot_id: int) -> float:
-        return self._robots[robot_id].stride_length
 
     def get_state(self, robot_id: int) -> StateFrame:
         return self._robots[robot_id].get_state()

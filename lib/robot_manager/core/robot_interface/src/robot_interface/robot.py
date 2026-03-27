@@ -14,11 +14,13 @@ class Robot(ABC):
         robot_id: int,
         dt: float = 0.01,
         stride_length: float = 0.0,
+        clearance: float = 0.05,
         controller_indexes: Optional[list[int]] = None,
     ) -> None:
         self._robot_id: int = robot_id
         self._dt: float = dt
         self._stride_length: float = stride_length
+        self._clearance: float = clearance
         self._controller_indexes: Optional[list[int]] = (
             list(controller_indexes) if controller_indexes is not None else None
         )
@@ -31,6 +33,10 @@ class Robot(ABC):
     @property
     def stride_length(self) -> float:
         return self._stride_length
+
+    @property
+    def clearance(self) -> float:
+        return self._clearance
 
     @property
     def controller_indexes(self) -> Optional[list[int]]:

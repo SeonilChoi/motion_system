@@ -9,6 +9,39 @@ class KinematicsSolver(ABC):
     def __init__(self, link_list: list[float]) -> None:
         self._link_list = link_list
 
+    @staticmethod
+    def _get_pose_transformation_matrix(pose: np.ndarray) -> np.ndarray:
+        x, y, z = pose[0]
+        R, P, Y = pose[1]
+
+        Rz = np.array([
+            [np.cos(Y), -np.sin(Y), 0],
+            [np.sin(Y),  np.cos(Y), 0],
+            [        0,          0, 1]
+        ])
+
+        Ry = np.array([
+            [ np.cos(P), 0, np.sin(P)],
+            [         0, 1,         0],
+            [-np.sin(P), 0, np.cos(P)]
+        ])
+
+        Rx = np.array([
+            [1,         0,          0],
+            [0, np.cos(R), -np.sin(R)],
+            [0, np.sin(R),  np.cos(R)]
+        ])
+
+        R = Rz @ Ry @ Rx
+        p = np.array([x, y, z]).reshape(3, 1)
+        return np.r_[np.c_[R, p], [[0, 0, 0, 1]]]
+
+    @staticmethod
+    def _invert_pose_transformation_matrix(pose: np.ndarray) -> np.ndarray:
+        T_wb = KinematicsSolver._get_pose_transformation_matrix(pose)
+        R = T_wb[:3, :3]
+        p = T_wb[:3, -1]
+        return np.r_[np.c_[R.T, -R.T @ p], [[0, 0, 0, 1]]]
 
     @staticmethod
     def _get_transformation_matrix(param: np.ndarray) -> np.ndarray:
@@ -34,9 +67,18 @@ class KinematicsSolver(ABC):
 
 
     @abstractmethod
-    def forward(self, positions: np.ndarray) -> np.ndarray:
+    def _forward(self, positions: np.ndarray) -> np.ndarray:
         ...
 
     @abstractmethod
-    def inverse(self, points: np.ndarray) -> np.ndarray:
+    def _inverse(self, points: np.ndarray) -> np.ndarray:
+        ...
+
+    
+    @abstractmethod
+    def forward_with_pose(self, pose: np.ndarray, positions: np.ndarray) -> np.ndarray:
+        ...
+
+    @abstractmethod
+    def inverse_with_pose(self, pose: np.ndarray, points: np.ndarray) -> np.ndarray:
         ...

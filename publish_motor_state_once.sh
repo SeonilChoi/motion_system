@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Publish /motor_state at ~1 kHz from one process.
-# Position ramps from -pi/2 to +pi/2 and repeats.
-# Args: [COUNT] [STEP_RAD]
+# Publish /motor_state every 0.001 s with fixed initial positions.
+# Needs: source install/setup.bash (motion_system_msgs on PYTHONPATH).
+# Arg: motor count (default 36).
 COUNT="${1:-36}"
-STEP="${2:-0.01}"
 
-COUNT="$COUNT" STEP="$STEP" python3 - <<'PY'
+export COUNT
+python3 - <<'PY'
 import os
-import math
 
 import rclpy
 from rclpy.node import Node
@@ -17,50 +16,59 @@ from rclpy.qos import QoSProfile, QoSHistoryPolicy, QoSReliabilityPolicy
 
 from motion_system_msgs.msg import MotorFrame, MotorFrameMultiArray
 
+# Rad; same pattern as silver_lain.yaml home_joint_positions (6 legs × 3), one robot.
+R40, R140 = 0.6981317007977318, 2.443460952792061
+_ONE_ROBOT = [
+    0.0, R40, R140,
+    0.0, -R40, -R140,
+    0.0, R40, R140,
+    0.0, -R40, -R140,
+    0.0, R40, R140,
+    0.0, -R40, -R140,
+]
+# Default: two robots (0–17, 18–35)
+_DEFAULT = _ONE_ROBOT + _ONE_ROBOT
 
-class MotorStatePublisher(Node):
-    def __init__(self, count: int, step: float) -> None:
-        super().__init__("motor_state_ramp_pub")
+
+def positions(count: int) -> list[float]:
+    if count <= len(_DEFAULT):
+        return _DEFAULT[:count]
+    return _DEFAULT + [0.0] * (count - len(_DEFAULT))
+
+
+class Pub(Node):
+    def __init__(self, pos: list[float]) -> None:
+        super().__init__("motor_state_initial_pub")
         qos = QoSProfile(
             depth=1,
             reliability=QoSReliabilityPolicy.BEST_EFFORT,
             history=QoSHistoryPolicy.KEEP_LAST,
         )
         self._pub = self.create_publisher(MotorFrameMultiArray, "/motor_state", qos)
-        self._count = count
-        self._step = step
-        self._min_pos = -math.pi / 2.0
-        self._max_pos = math.pi / 2.0
-        self._pos = self._min_pos
-        self._timer = self.create_timer(0.001, self._on_timer)
+        self._pos = pos
+        self.create_timer(0.001, self._tick)
 
-    def _on_timer(self) -> None:
+    def _tick(self) -> None:
         msg = MotorFrameMultiArray()
-        for i in range(self._count):
-            frame = MotorFrame()
-            frame.number_of_target_interfaces = 0
-            frame.target_interface_id = []
-            frame.controller_index = i
-            frame.controlword = 0
-            frame.statusword = 0
-            frame.errorcode = 0
-            frame.position = self._pos
-            frame.velocity = 0.0
-            frame.torque = 0.0
-            msg.data.append(frame)
+        for i, p in enumerate(self._pos):
+            f = MotorFrame()
+            f.number_of_target_interfaces = 0
+            f.target_interface_id = []
+            f.controller_index = i
+            f.controlword = 0
+            f.statusword = 0
+            f.errorcode = 0
+            f.position = float(p)
+            f.velocity = 0.0
+            f.torque = 0.0
+            msg.data.append(f)
         self._pub.publish(msg)
-
-        self._pos += self._step
-        if self._pos > self._max_pos:
-            self._pos = self._min_pos
 
 
 def main() -> None:
-    count = int(os.environ.get("COUNT", "36"))
-    step = float(os.environ.get("STEP", "0.01"))
-
+    n = int(os.environ["COUNT"])
     rclpy.init()
-    node = MotorStatePublisher(count, step)
+    node = Pub(positions(n))
     try:
         rclpy.spin(node)
     finally:
@@ -68,6 +76,5 @@ def main() -> None:
         rclpy.shutdown()
 
 
-if __name__ == "__main__":
-    main()
+main()
 PY

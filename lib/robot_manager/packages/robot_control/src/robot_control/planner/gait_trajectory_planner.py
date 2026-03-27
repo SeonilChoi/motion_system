@@ -2,32 +2,32 @@ from __future__ import annotations
 
 import numpy as np
 
-from robot_interface.planner import TrajectoryPlanner, _quintic_time_scaling, _parabolic_time_scaling
+from robot_interface.planner import TrajectoryPlanner
 
 
 class GaitTrajectoryPlanner(TrajectoryPlanner):
-    def __init__(self) -> None:
+    def __init__(self, clearance: float) -> None:
         super().__init__()
+        self._clearance : float = clearance
         self._duration : float = None
-        self._clearance : float = None
         
 
-    def set_parameters(
-        self,
-        curr_position: np.ndarray,
-        goal_position: np.ndarray,
-        duration: float,
-        clearance: float,
-    ) -> None:
-        super().set_parameters(curr_position, goal_position)
+    def set_initial_state(self, initial_state: np.ndarray) -> None:
+        super().set_initial_state(initial_state)
+
+    def update_goal_state(self, goal_state: np.ndarray, duration: float) -> None:
+        super().update_goal_state(goal_state)
         self._duration = duration
-        self._clearance = clearance
 
-    def eval(self, s : float) -> np.ndarray:
-        u = _quintic_time_scaling(s)
-        v = _parabolic_time_scaling(s)
+    def eval(self, s : float or List[float]) -> np.ndarray:
+        u = self._quintic_time_scaling(s)
+        v = self._parabolic_time_scaling(s)
         
-        p = self._curr_position + u * self._delta
-        p[2] += (v * self._clearance)
+        if isinstance(s, float):
+            p = self._init_state + u * (self._goal_state - self._init_state)
+            p[2] += (v * self._clearance)
+        else:
+            p = self._init_state + u.reshape(-1, 1) * (self._goal_state - self._init_state)
+            p[:, 2] += (v * self._clearance)
 
         return p

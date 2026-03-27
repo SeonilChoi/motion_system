@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Optional
+from typing import Any, Optional
 
 from common_robot_interface import ActionFrame, StateFrame
 from common_robot_interface.joint import JointState
@@ -17,9 +17,12 @@ class LittleReader(Robot):
         robot_id: int = 0,
         dt: float = 0.01,
         stride_length: float = 0.0,
+        clearance: float = 0.05,
         controller_indexes: Optional[list[int]] = None,
+        home_joint_positions: Any = None,
     ) -> None:
-        super().__init__(robot_id, dt, stride_length, controller_indexes)
+        super().__init__(robot_id, dt, stride_length, clearance, controller_indexes)
+        self._home_joint_positions = home_joint_positions
         self._scheduler = FsmScheduler(dt)
         self._curr_joint_state: Optional[JointState] = None
 

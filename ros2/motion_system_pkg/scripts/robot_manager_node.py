@@ -161,9 +161,10 @@ class RobotManagerNode(Node):
             self._select_robot(self._joy_axes[JoyAxes.UP_DOWN_DIRECTION])
 
         self.get_logger().info(f"Selected robot ID: {self._selected_robot_id}, State: {self._robot_manager.get_state(self._selected_robot_id).state}, Progress: {self._robot_manager.get_state(self._selected_robot_id).progress}")
+        """
         for robot_id in range(self._number_of_robots):
             self.get_logger().info(f"Robot {robot_id}: points: {self._robot_manager.get_robot_states(robot_id).pose.points}")
-
+        """
 
         if self._robot_manager.get_state(self._selected_robot_id).state == State.STOPPED:
             self._curr_action[self._selected_robot_id] = ActionFrame(action=Action.STOP)
@@ -175,18 +176,12 @@ class RobotManagerNode(Node):
 
         if self._curr_action[self._selected_robot_id].action == Action.WALK:
             vx = self._joy_axes[JoyAxes.LEFT_VERTICAL]
-            vy = self._joy_axes[JoyAxes.RIGHT_HORIZONTAL]
-
-            norm = np.sqrt(vx**2 + vy**2)
-            if norm == 0.0:
-                duration = 0.0
-            else:
-                speed = (norm / np.sqrt(2)) * 0.05 # 0.05 is the maximum speed
-                duration = self._robot_manager.stride_length(self._selected_robot_id) / speed
+            vy = self._joy_axes[JoyAxes.LEFT_HORIZONTAL]
+            wz = self._joy_axes[JoyAxes.RIGHT_HORIZONTAL]
+            
             self._curr_action[self._selected_robot_id] = ActionFrame(
                 action=Action.WALK,
-                duration=duration,
-                goal=np.array([vx, vy, 0.0]),
+                goal=np.array([vx, vy, wz])
             )
 
         self._robot_manager.set_action(self._curr_action)

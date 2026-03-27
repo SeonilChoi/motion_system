@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from enum import Enum, auto
 from typing import Dict, List, Tuple
 
+import numpy as np
+
 from common_robot_interface import Action, ActionFrame, State, StateFrame
 
 from robot_interface.scheduler import Scheduler
@@ -54,7 +56,12 @@ class GaitScheduler(Scheduler):
             self._offset[leg] = 0.5 # 0.5 is the offset for the leg group B
 
         self._prev_phase: Dict[int, Phase] = {leg: Phase.STANCE for leg in leg_group_a + leg_group_b}
-
+        for leg in self._prev_phase.keys():
+            if self._offset[leg] == 0.0:
+                self._prev_phase[leg] = Phase.SWING
+            else:
+                self._prev_phase[leg] = Phase.STANCE
+        
         self._events: List[Event] = []
 
 
@@ -90,7 +97,7 @@ class GaitScheduler(Scheduler):
         if frame.action != Action.WALK:
             self._current_state = StateFrame(state=next_kind, progress=0.0)
         else:
-            if frame.duration == 0.0:
+            if np.all(frame.goal == 0.0):
                 self._current_state = StateFrame(state=next_kind, progress=self._prev_progress)
             else:
                 self._T = frame.duration

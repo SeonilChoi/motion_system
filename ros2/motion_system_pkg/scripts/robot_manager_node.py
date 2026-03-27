@@ -15,7 +15,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from sensor_msgs.msg import Joy
-from motion_system_msgs.msg import MotorFrameMultiArray
+from motion_system_msgs.msg import MotorFrameMultiArray, MotorFrame
 
 
 class JoyAxes(Enum):
@@ -132,6 +132,16 @@ class RobotManagerNode(Node):
             self._selected_robot_id = self._number_of_robots - 1
         self.get_logger().info(f"Selected robot ID: {self._selected_robot_id}")
 
+    def _publish_joint_commands(self, joint_commands: JointState) -> None:
+        msg = MotorFrameMultiArray()
+        msg.data = [MotorFrame(
+            controller_index=int(joint_commands.motor_id[i]),
+            position=float(joint_commands.position[i]),
+            velocity=float(joint_commands.velocity[i]),
+            torque=float(joint_commands.torque[i]),
+        ) for i in range(self._number_of_motors)]
+        self._motor_cmd_pub.publish(msg)
+
 
     def motor_state_callback(self, msg: MotorFrameMultiArray) -> None:
         for i in range(self._number_of_motors):
@@ -160,12 +170,6 @@ class RobotManagerNode(Node):
         if self._joy_axes[JoyAxes.UP_DOWN_DIRECTION] != 0.0 and self._prev_joy_axes[JoyAxes.UP_DOWN_DIRECTION] == 0.0:
             self._select_robot(self._joy_axes[JoyAxes.UP_DOWN_DIRECTION])
 
-        self.get_logger().info(f"Selected robot ID: {self._selected_robot_id}, State: {self._robot_manager.get_state(self._selected_robot_id).state}, Progress: {self._robot_manager.get_state(self._selected_robot_id).progress}")
-        """
-        for robot_id in range(self._number_of_robots):
-            self.get_logger().info(f"Robot {robot_id}: points: {self._robot_manager.get_robot_states(robot_id).pose.points}")
-        """
-
         if self._robot_manager.get_state(self._selected_robot_id).state == State.STOPPED:
             self._curr_action[self._selected_robot_id] = ActionFrame(action=Action.STOP)
 
@@ -184,8 +188,9 @@ class RobotManagerNode(Node):
                 goal=np.array([vx, vy, wz])
             )
 
-        self._robot_manager.set_action(self._curr_action)
-
+        joint_commands = self._robot_manager.set_action(self._curr_action)
+        self._publish_joint_commands(joint_commands)
+        
         self._prev_joy_axes = copy.deepcopy(self._joy_axes)
         self._prev_joy_buttons = copy.deepcopy(self._joy_buttons)
 

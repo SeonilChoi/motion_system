@@ -3,6 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Optional
 
+import numpy as np
+
 from common_robot_interface import ActionFrame, StateFrame
 from common_robot_interface.joint import JointState
 from common_robot_interface.robot import RobotState
@@ -56,5 +58,5 @@ class Robot(ABC):
         ...
 
     @abstractmethod
-    def set_action(self, frame: ActionFrame) -> None:
+    def set_action(self, frame: ActionFrame) -> np.ndarray:
         ...

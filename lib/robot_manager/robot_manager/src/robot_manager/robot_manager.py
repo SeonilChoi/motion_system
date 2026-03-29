@@ -98,11 +98,20 @@ class RobotManager:
     def get_state(self, robot_id: int) -> StateFrame:
         return self._robots[robot_id].get_state()
 
-    def set_action(self, action_frame_list: List[ActionFrame]) -> None:
+    def set_action(self, action_frame_list: List[ActionFrame]) -> JointState:
+        positions = np.zeros(self._number_of_motors)
         for robot_id, frame in enumerate(action_frame_list):
             if robot_id >= len(self._robots):
                 break
-            self._robots[robot_id].set_action(frame)
+            positions[self._robots[robot_id].controller_indexes] = self._robots[robot_id].set_action(frame)
+
+        commands = JointState(
+            motor_id=np.arange(self._number_of_motors),
+            position=positions,
+            velocity=np.zeros(self._number_of_motors),
+            torque=np.zeros(self._number_of_motors),
+        )
+        return commands
 
     def get_robot_states(self, robot_id: int) -> RobotState:
         return self._robots[robot_id].get_robot_state()

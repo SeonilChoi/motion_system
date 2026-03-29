@@ -147,43 +147,30 @@ class SilverLain(Robot):
         return self._scheduler.current_state
 
     def set_action(self, frame: ActionFrame) -> None:
-        
-        if frame.action == Action.WALK:
+        duration = 0.0
+
+        if frame.action == Action.HOME:
+            self._first_step = True
+            self._scheduler.tick(frame, duration)
+        elif frame.action == Action.MOVE:
+            self._scheduler.tick(frame, duration)
+        elif frame.action == Action.STOP:
+            self._scheduler.tick(frame, duration)
+        else:
             stride_length = self._stride_length * 0.5 if self._first_step else self._stride_length
 
             linear_velocity = np.array([frame.goal[0], frame.goal[1]])
-            
             linear_speed = np.linalg.norm(linear_velocity)
             if linear_speed == 0.0:
                 duration = 10.0
             else:
-                linear_direction = linear_velocity / linear_speed
-                
+                linear_direction = linear_velocity / linear_speed    
                 normalized_linear_speed = np.clip(linear_speed, 0.0, 1.0) * 0.1 # 0.1 m/s is the maximum speed
                 duration = stride_length / normalized_linear_speed
                 linear_velocity = normalized_linear_speed * linear_direction
 
-            self._first_step = False
+            event = self._scheduler.tick(frame, duration)
 
-            new_frame = ActionFrame(
-                action=Action.WALK,
-                duration=duration,
-                goal=np.array([linear_velocity[0], linear_velocity[1], frame.goal[2]])
-            )
-
-            event = self._scheduler.tick(new_frame)
-        else:
-            self._first_step = True
-            event = self._scheduler.tick(frame)
-        
-
-        if event:
-            if frame.action == Action.HOME:
-                pass
-            elif frame.action == Action.MOVE:
-                pass
-
-        if frame.action == Action.WALK:
             if self._scheduler.events:
                 self._events = self._scheduler.events
 
@@ -194,14 +181,13 @@ class SilverLain(Robot):
             
             if self._events:
                 self._target_pose, target_points = self._compute_target_state(event, self._scheduler.current_state.progress, duration, new_frame.goal, linear_direction)
-            
                 self._target_positions = self._kinematic_solver.inverse_with_pose(self._target_pose, target_points)
-
-        if frame.action == Action.STOP:
-            pass
+                return self._target_positions
 
         if frame.action == Action.WALK and not np.all(frame.goal == 0.0):
             self._scheduler.step()
+
+        return self._curr_joint_states.position
 
     def get_robot_state(self) -> RobotState:
         return self._curr_robot_state
@@ -220,7 +206,7 @@ class SilverLain(Robot):
             0.0,
             self._curr_robot_state.pose.orientation.z
         ])
-        points = self._kinematic_solver.forward_with_pose(curr_pose, self._curr_joint_states.position)[:, -1, :]
+        points = self._kinematic_solver.forward_with_pose(curr_pose, self._curr_joint_states.position)
         point_list = [Vector3(float(p[0]), float(p[1]), float(p[2])) for p in points]
         self._curr_robot_state = RobotState(
             robot_id=self._robot_id,

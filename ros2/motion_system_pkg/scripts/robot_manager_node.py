@@ -42,6 +42,13 @@ class JoyButton(Enum):
     RIGHT_AXES = 10
 
 
+def _joy_qos() -> QoSProfile:
+    return QoSProfile(
+        depth=1,
+        reliability=QoSReliabilityPolicy.BEST_EFFORT,
+        history=QoSHistoryPolicy.KEEP_LAST,
+    )
+
 def _motor_qos() -> QoSProfile:
     return QoSProfile(
         depth=1,
@@ -49,7 +56,7 @@ def _motor_qos() -> QoSProfile:
         history=QoSHistoryPolicy.KEEP_LAST,
     )
 
-def _joy_qos() -> QoSProfile:
+def _robot_state_qos() -> QoSProfile:
     return QoSProfile(
         depth=1,
         reliability=QoSReliabilityPolicy.BEST_EFFORT,
@@ -95,6 +102,7 @@ class RobotManagerNode(Node):
             ActionFrame(action=Action.STOP) for _ in range(self._number_of_robots)
         ]
 
+        # ROS2 Variables
         self._joy_sub = self.create_subscription(
             Joy,
             'joy',
@@ -115,6 +123,12 @@ class RobotManagerNode(Node):
             _motor_qos(),
         )
 
+        self._robot_state_pub = self.create_publisher(
+            RobotState,
+            'robot_state',
+            _robot_state_qos(),
+        )
+
         self._timer = self.create_timer(
             self._robot_manager.dt,
             self.timer_callback,
@@ -132,6 +146,32 @@ class RobotManagerNode(Node):
             self._selected_robot_id = self._number_of_robots - 1
         self.get_logger().info(f"Selected robot ID: {self._selected_robot_id}")
 
+    def _normalize_joy_command(self, joy_axes: Dict[JoyAxes, float]) -> np.ndarray:
+        vx = joy_axes[JoyAxes.LEFT_VERTICAL]
+        vy = joy_axes[JoyAxes.LEFT_HORIZONTAL]
+        wz = joy_axes[JoyAxes.RIGHT_HORIZONTAL]
+        
+        stride_length = self._robot_manager.stride_length(self._selected_robot_id)
+
+        linear_direction = np.array([0.0, 0.0])
+        linear_velocity = np.array([vx, vy])
+        linear_speed = np.linalg.norm(linear_velocity)
+
+        if linear_speed == 0.0:
+            duration = 10.0
+        else:
+            normalized_linear_speed = np.clip(linear_speed, 0.0, 1.0) * 0.1
+            duration = stride_length / normalized_linear_speed
+
+            linear_direction = linear_velocity / linear_speed
+            linear_velocity = normalized_linear_speed * linear_direction
+
+        return ActionFrame(
+            action=Action.WALK,
+            goal=np.array([linear_velocity[0], linear_velocity[1], wz]),
+            duration=duration,
+        )
+
     def _publish_joint_commands(self, joint_commands: JointState) -> None:
         msg = MotorFrameMultiArray()
         msg.data = [MotorFrame(
@@ -141,6 +181,9 @@ class RobotManagerNode(Node):
             torque=float(joint_commands.torque[i]),
         ) for i in range(self._number_of_motors)]
         self._motor_cmd_pub.publish(msg)
+
+    def _publish_robot_state(self, robot_state: RobotState) -> None:
+        pass
 
 
     def motor_state_callback(self, msg: MotorFrameMultiArray) -> None:
@@ -164,6 +207,9 @@ class RobotManagerNode(Node):
             self._joy_buttons[btn] = msg.buttons[btn.value]
 
     def timer_callback(self) -> None:
+        self._robot_state = self._robot_manager.get_robot_states()
+        self._publish_robot_state(self._robot_state)
+
         if self._is_valid_joy_stick is False:
             return
         
@@ -179,14 +225,7 @@ class RobotManagerNode(Node):
                 break
 
         if self._curr_action[self._selected_robot_id].action == Action.WALK:
-            vx = self._joy_axes[JoyAxes.LEFT_VERTICAL]
-            vy = self._joy_axes[JoyAxes.LEFT_HORIZONTAL]
-            wz = self._joy_axes[JoyAxes.RIGHT_HORIZONTAL]
-            
-            self._curr_action[self._selected_robot_id] = ActionFrame(
-                action=Action.WALK,
-                goal=np.array([vx, vy, wz])
-            )
+            self._curr_action[self._selected_robot_id] = self._normalize_joy_command(self._joy_axes)
 
         joint_commands = self._robot_manager.set_action(self._curr_action)
         self._publish_joint_commands(joint_commands)

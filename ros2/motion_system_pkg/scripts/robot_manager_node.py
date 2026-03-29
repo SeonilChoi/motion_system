@@ -207,29 +207,37 @@ class RobotManagerNode(Node):
             self._joy_buttons[btn] = msg.buttons[btn.value]
 
     def timer_callback(self) -> None:
+        # Read robot state and publish it
         self._robot_state = self._robot_manager.get_robot_states()
         self._publish_robot_state(self._robot_state)
 
+        # If joy stick is not valid, return
         if self._is_valid_joy_stick is False:
             return
         
+        # Select robot if up/down direction is changed
         if self._joy_axes[JoyAxes.UP_DOWN_DIRECTION] != 0.0 and self._prev_joy_axes[JoyAxes.UP_DOWN_DIRECTION] == 0.0:
             self._select_robot(self._joy_axes[JoyAxes.UP_DOWN_DIRECTION])
 
+        # If robot is stopped, set action to STOP
         if self._robot_manager.get_state(self._selected_robot_id).state == State.STOPPED:
             self._curr_action[self._selected_robot_id] = ActionFrame(action=Action.STOP)
 
+        # Set action based on button press
         for btn, action in self._joy_button_action.items():
             if self._joy_buttons[btn] and not self._prev_joy_buttons[btn]:
                 self._curr_action[self._selected_robot_id] = ActionFrame(action=action)
                 break
 
+        # Normalize joy command if action is WALK
         if self._curr_action[self._selected_robot_id].action == Action.WALK:
             self._curr_action[self._selected_robot_id] = self._normalize_joy_command(self._joy_axes)
 
+        # Set action and get joint commands and publish it
         joint_commands = self._robot_manager.set_action(self._curr_action)
         self._publish_joint_commands(joint_commands)
         
+        # Update previous joy axes and buttons
         self._prev_joy_axes = copy.deepcopy(self._joy_axes)
         self._prev_joy_buttons = copy.deepcopy(self._joy_buttons)
 

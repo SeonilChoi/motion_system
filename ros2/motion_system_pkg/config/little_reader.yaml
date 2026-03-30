@@ -3,12 +3,11 @@
 
 dt: 0.01
 
-number_of_robots: 2
+number_of_robots: 1
 
 robots:
   - id: 0
     robot: little_reader
     stride_length: 0.0
-  - id: 1
-    robot: little_reader
-    stride_length: 0.0
+    controller_indexes: [0, 1, 2, 3]
+    interface_ids: [1, 1, 1, 1]

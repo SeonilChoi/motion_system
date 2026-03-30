@@ -3,19 +3,21 @@
 from __future__ import annotations
 
 import copy
+import numpy as np
 from typing import Dict, List
 from enum import Enum
 
-import numpy as np
-
-from common_robot_interface import Action, ActionFrame, State, JointState
 from robot_manager import RobotManager
+from common_robot_interface import Action, ActionFrame, State, StateFrame
+from common_robot_interface import JointStatus, RobotStatus
 
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
+from std_msgs.msg import Int8MultiArray
 from sensor_msgs.msg import Joy
-from motion_system_msgs.msg import MotorFrameMultiArray, MotorFrame
+from geometry_msgs.msg import Pose
+from motion_system_msgs.msg import MotorStatus
 
 
 class JoyAxes(Enum):
@@ -49,14 +51,14 @@ def _joy_qos() -> QoSProfile:
         history=QoSHistoryPolicy.KEEP_LAST,
     )
 
-def _motor_qos() -> QoSProfile:
+def _motor_status_qos() -> QoSProfile:
     return QoSProfile(
         depth=1,
         reliability=QoSReliabilityPolicy.BEST_EFFORT,
         history=QoSHistoryPolicy.KEEP_LAST,
     )
 
-def _robot_state_qos() -> QoSProfile:
+def _pose_qos() -> QoSProfile:
     return QoSProfile(
         depth=1,
         reliability=QoSReliabilityPolicy.BEST_EFFORT,
@@ -73,9 +75,9 @@ class RobotManagerNode(Node):
         # Robot Manager Variables
         self._robot_manager: RobotManager = RobotManager(self._config_file)
         self._selected_robot_id: int = 0
-        self._number_of_robots: int = self._robot_manager.number_of_robots
         self._number_of_motors: int = self._robot_manager.number_of_motors
-
+        self._number_of_robots: int = self._robot_manager.number_of_robots
+        
         # JoyStick Variables
         self._is_valid_joy_stick: bool = False
         self._joy_axes: Dict[JoyAxes, float] = {axes: 0.0 for axes in JoyAxes}
@@ -90,11 +92,20 @@ class RobotManagerNode(Node):
         }
 
         # Joint State Variables
-        self._joint_states: JointState = JointState(
+        self._joint_status: JointStatus = JointStatus(
             motor_id=np.zeros(self._number_of_motors, dtype=np.int32),
             position=np.zeros(self._number_of_motors, dtype=np.float64),
             velocity=np.zeros(self._number_of_motors, dtype=np.float64),
-            torque=np.zeros(self._number_of_motors, dtype=np.float64),
+            torque=np.zeros(self._number_of_motors, dtype=np.float64)
+        )
+
+        # Robot Status Variables
+        self._robot_status: RobotStatus = RobotStatus(
+            robot_id = self._selected_robot_id,
+            pose=np.zeros(6, dtype=np.float64),
+            point=np.zeros((6, 3), dtype=np.float64),
+            twist=np.zeros(6, dtype=np.float64),
+            wrench=np.zeros(6, dtype=np.float64)
         )
 
         # Scheduler Variables
@@ -111,22 +122,22 @@ class RobotManagerNode(Node):
         )      
 
         self._motor_state_sub = self.create_subscription(
-            MotorFrameMultiArray,
+            MotorStatus,
             'motor_state',
             self.motor_state_callback,
-            _motor_qos(),
+            _motor_status_qos(),
         )
 
-        self._motor_cmd_pub = self.create_publisher(
-            MotorFrameMultiArray,
+        self._motor_command_pub = self.create_publisher(
+            MotorStatus,
             'motor_command',
-            _motor_qos(),
+            _motor_status_qos(),
         )
 
-        self._robot_state_pub = self.create_publisher(
-            RobotState,
-            'robot_state',
-            _robot_state_qos(),
+        self._pose_pub = self.create_publisher(
+            Pose,
+            'pose',
+            _pose_qos(),
         )
 
         self._timer = self.create_timer(
@@ -172,28 +183,38 @@ class RobotManagerNode(Node):
             duration=duration,
         )
 
-    def _publish_joint_commands(self, joint_commands: JointState) -> None:
-        msg = MotorFrameMultiArray()
-        msg.data = [MotorFrame(
-            controller_index=int(joint_commands.motor_id[i]),
-            position=float(joint_commands.position[i]),
-            velocity=float(joint_commands.velocity[i]),
-            torque=float(joint_commands.torque[i]),
-        ) for i in range(self._number_of_motors)]
-        self._motor_cmd_pub.publish(msg)
+    def _publish_joint_command(self, joint_command: JointStatus) -> None:
+        msg = MotorStatus()
+        msg.number_of_target_interfaces = np.ones(self._number_of_motors, dtype=np.uint8)
+        msg.target_interface_id = [
+            Int8MultiArray(data=[int(joint_command.interface_id[i])])
+            for i in range(self._number_of_motors)
+        ]
+        msg.controller_index = joint_command.motor_id
+        msg.position = joint_command.position
+        msg.velocity = joint_command.velocity
+        msg.torque = joint_command.torque
+        self._motor_command_pub.publish(msg)
 
-    def _publish_robot_state(self, robot_state: RobotState) -> None:
-        pass
+    def _publish_pose(self, robot_status: RobotStatus) -> None:
+        msg = Pose()
+        msg.position.x = robot_status.pose[0]
+        msg.position.y = robot_status.pose[1]
+        msg.position.z = robot_status.pose[2]
+        msg.orientation.x = robot_status.pose[3]
+        msg.orientation.y = robot_status.pose[4]
+        msg.orientation.z = robot_status.pose[5]
+        self._pose_pub.publish(msg)
 
 
-    def motor_state_callback(self, msg: MotorFrameMultiArray) -> None:
+    def motor_state_callback(self, msg: MotorStatus) -> None:
         for i in range(self._number_of_motors):
-            self._joint_states.motor_id[i] = msg.data[i].controller_index
-            self._joint_states.position[i] = msg.data[i].position
-            self._joint_states.velocity[i] = msg.data[i].velocity
-            self._joint_states.torque[i] = msg.data[i].torque
+            self._joint_status.motor_id[i] = msg.controller_index[i]
+            self._joint_status.position[i] = msg.position[i]
+            self._joint_status.velocity[i] = msg.velocity[i]
+            self._joint_status.torque[i] = msg.torque[i]
 
-        self._robot_manager.set_joint_states(self._joint_states)
+        self._robot_manager.update_joint_status(self._joint_status)
 
     def joy_callback(self, msg: Joy) -> None:
         if self._is_valid_joy_stick is False:
@@ -208,8 +229,8 @@ class RobotManagerNode(Node):
 
     def timer_callback(self) -> None:
         # Read robot state and publish it
-        self._robot_state = self._robot_manager.get_robot_states()
-        self._publish_robot_state(self._robot_state)
+        self._robot_status = self._robot_manager.get_robot_status(self._selected_robot_id)
+        self._publish_pose(self._robot_status)
 
         # If joy stick is not valid, return
         if self._is_valid_joy_stick is False:
@@ -218,14 +239,17 @@ class RobotManagerNode(Node):
         # Select robot if up/down direction is changed
         if self._joy_axes[JoyAxes.UP_DOWN_DIRECTION] != 0.0 and self._prev_joy_axes[JoyAxes.UP_DOWN_DIRECTION] == 0.0:
             self._select_robot(self._joy_axes[JoyAxes.UP_DOWN_DIRECTION])
-
+        
         # If robot is stopped, set action to STOP
-        if self._robot_manager.get_state(self._selected_robot_id).state == State.STOPPED:
+        if self._robot_manager.get_state_frame(self._selected_robot_id).state == State.STOPPED:
             self._curr_action[self._selected_robot_id] = ActionFrame(action=Action.STOP)
 
         # Set action based on button press
         for btn, action in self._joy_button_action.items():
             if self._joy_buttons[btn] and not self._prev_joy_buttons[btn]:
+                
+                self.get_logger().info(f"Action: {action}")
+                
                 self._curr_action[self._selected_robot_id] = ActionFrame(action=action)
                 break
 
@@ -234,8 +258,8 @@ class RobotManagerNode(Node):
             self._curr_action[self._selected_robot_id] = self._normalize_joy_command(self._joy_axes)
 
         # Set action and get joint commands and publish it
-        joint_commands = self._robot_manager.set_action(self._curr_action)
-        self._publish_joint_commands(joint_commands)
+        joint_command = self._robot_manager.set_action_frame(self._curr_action)
+        self._publish_joint_command(joint_command)
         
         # Update previous joy axes and buttons
         self._prev_joy_axes = copy.deepcopy(self._joy_axes)

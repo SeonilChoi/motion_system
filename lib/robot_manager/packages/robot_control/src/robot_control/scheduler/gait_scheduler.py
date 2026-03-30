@@ -116,6 +116,8 @@ class GaitScheduler(Scheduler):
                     curr_phase = Phase.STANCE if curr_progress < 0.5 else Phase.SWING
 
                     if prev_phase != curr_phase:
+                        is_event = True
+                        
                         if prev_phase == Phase.STANCE and curr_phase == Phase.SWING:
                             self._events.append(Event(leg=leg, event=EventKind.LIFT_OFF))
                         elif prev_phase == Phase.SWING and curr_phase == Phase.STANCE:

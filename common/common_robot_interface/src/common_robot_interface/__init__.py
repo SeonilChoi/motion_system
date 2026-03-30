@@ -1,11 +1,13 @@
 from .action import Action, ActionFrame
-from .joint import JointState
+from .joint import JointStatus
+from .robot import RobotStatus
 from .state import State, StateFrame
 
 __all__ = [
     'Action',
     'ActionFrame',
-    'JointState',
+    'JointStatus',
+    'RobotStatus',
     'State',
     'StateFrame',
 ]

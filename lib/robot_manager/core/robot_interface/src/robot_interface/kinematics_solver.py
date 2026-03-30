@@ -11,8 +11,7 @@ class KinematicsSolver(ABC):
 
     @staticmethod
     def _get_pose_transformation_matrix(pose: np.ndarray) -> np.ndarray:
-        x, y, z = pose[0]
-        R, P, Y = pose[1]
+        x, y, z, R, P, Y = pose
 
         Rz = np.array([
             [np.cos(Y), -np.sin(Y), 0],
@@ -58,12 +57,10 @@ class KinematicsSolver(ABC):
     @staticmethod
     def _forward_kinematics(dh_params: np.ndarray) -> np.ndarray:
         T = np.eye(4)
-        T_list = np.zeros((dh_params.shape[0], 4, 4))
-        for i, param in enumerate(dh_params):
+        for param in dh_params:
             T = T @ KinematicsSolver._get_transformation_matrix(param)
-            T_list[i] = T
 
-        return T_list
+        return T[:3, -1].reshape(3)
 
 
     @abstractmethod

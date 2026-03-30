@@ -14,8 +14,7 @@ find_package(rosidl_default_generators REQUIRED)
 # find_package(<dependency> REQUIRED)
 
 set(msg_files
-  "msg/MotorFrame.msg"
-  "msg/MotorFrameMultiArray.msg"
+  "msg/MotorStatus.msg"
 )
 
 rosidl_generate_interfaces(${PROJECT_NAME}

@@ -10,7 +10,6 @@ class State(Enum):
     WALKING = auto()
     STOPPED = auto()
 
-
 @dataclass(frozen=True, slots=True)
 class StateFrame:
     state: State

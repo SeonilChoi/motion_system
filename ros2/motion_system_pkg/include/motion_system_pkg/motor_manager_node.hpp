@@ -5,28 +5,28 @@
 #include <thread>
 
 #include "rclcpp/rclcpp.hpp"
-#include "motion_system_msgs/msg/motor_frame_multi_array.hpp"
+#include "motion_system_msgs/msg/motor_status.hpp"
 
 #include "motor_manager/motor_manager.hpp"
 
 class MotorManagerNode : public rclcpp::Node {
 public:
-    using MotorFrameMultiArray = motion_system_msgs::msg::MotorFrameMultiArray;
+    using MotorStatus = motion_system_msgs::msg::MotorStatus;
 
     explicit MotorManagerNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
     ~MotorManagerNode();
 
 private:
-    void motor_command_callback(const MotorFrameMultiArray::SharedPtr msg);
+    void motor_command_callback(const MotorStatus::SharedPtr msg);
 
-    void motor_state_callback();
+    void timer_callback();
 
-    rclcpp::Subscription<MotorFrameMultiArray>::SharedPtr motor_command_subscriber_;
+    rclcpp::Subscription<MotorStatus>::SharedPtr motor_command_subscriber_;
 
-    rclcpp::Publisher<MotorFrameMultiArray>::SharedPtr motor_state_publisher_;
+    rclcpp::Publisher<MotorStatus>::SharedPtr motor_status_publisher_;
 
-    rclcpp::TimerBase::SharedPtr motor_state_timer_;
+    rclcpp::TimerBase::SharedPtr motor_status_timer_;
 
     std::string config_file_;
 

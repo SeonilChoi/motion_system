@@ -78,12 +78,11 @@ class SilverLainSolver(KinematicsSolver):
         return np.array([th1, th2, -th3], dtype=np.float64)
 
     def _forward(self, positions: np.ndarray) -> np.ndarray:
-        points = np.zeros((6, 6, 3))
+        points = np.zeros((6, 3))
 
         for i in range(6):
             dh_params = self._update_dh_params(i, positions)
-            T = self._forward_kinematics(dh_params)
-            points[i] = T[:, :3, 3]
+            points[i] = self._forward_kinematics(dh_params)
 
         return points
 
@@ -100,22 +99,20 @@ class SilverLainSolver(KinematicsSolver):
 
 
     def forward_with_pose(self, pose: np.ndarray, positions: np.ndarray) -> np.ndarray:
-        pose = np.array([[pose[0], pose[1], pose[2]], [0.0, 0.0, pose[3]]])
-        
         p_b = self._forward(positions)
+        
         p_w = np.dot(
             self._get_pose_transformation_matrix(pose),
-            np.concatenate((p_b, np.ones((6, 6, 1))), axis=-1).transpose(0, 2, 1)
-        ).transpose(1, 2, 0)
-        return p_w[:, :, :3]
-
-    def inverse_with_pose(self, pose: np.ndarray, points: np.ndarray) -> np.ndarray:
-        pose = np.array([[pose[0], pose[1], pose[2]], [0.0, 0.0, pose[3]]])
-        
-        p_b = np.dot(
-            self._invert_pose_transformation_matrix(pose),
-            np.concatenate((points, np.ones((6, 1))), axis=-1).T
+            np.c_[p_b, np.ones((6, 1))].T
         ).T
         
-        positions = self._inverse(p_b[:, :3])
-        return positions
+        return p_w[:, :3]
+
+    def inverse_with_pose(self, pose: np.ndarray, points: np.ndarray) -> np.ndarray:
+        p_b = np.dot(
+            self._invert_pose_transformation_matrix(pose),
+            np.c_[points, np.ones((6, 1))].T
+        ).T
+        
+        return self._inverse(p_b[:, :3])
+        

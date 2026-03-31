@@ -142,26 +142,21 @@ class SilverLain(Robot):
             self._first_step = True
 
         event = self._scheduler.tick(frame)
-
+        
         if frame.action == Action.WALK:
-            self._events = self._scheduler.events
+            if event:
+                self._events = self._scheduler.events
+                current_point = self._kinematic_solver.forward_with_pose(self._curr_robot_state.pose, self._curr_joint_status.position)
+                self._trajectory_planner.set_initial_state(current_point)
+    
+            target_pose, target_point = self._compute_next_target(frame.duration, frame.goal)
 
-            if self._events:
-                if event:
-                    current_point = self._kinematic_solver.forward_with_pose(
-                        self._curr_robot_state.pose, self._curr_joint_status.position
-                    )
-                    self._trajectory_planner.set_initial_state(current_point)
+            target_position = self._kinematic_solver.inverse_with_pose(target_pose, target_point)
 
-                goal_vel = frame.goal if frame.goal is not None else np.zeros(3, dtype=np.float64)
-                target_pose, target_point = self._compute_next_target(frame.duration, goal_vel)
-
-                target_position = self._kinematic_solver.inverse_with_pose(target_pose, target_point)
-
-                # For test
-                self._curr_robot_state.pose = target_pose
-                self._curr_robot_state.point = target_point
-                self._curr_joint_status.position = target_position
+            # For test
+            self._curr_robot_state.pose = target_pose
+            self._curr_robot_state.point = target_point
+            self._curr_joint_status.position = target_position
 
         if frame.action == Action.WALK and not np.all(frame.goal == 0.0):
             self._scheduler.step()

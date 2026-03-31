@@ -164,7 +164,6 @@ class RobotManagerNode(Node):
         
         stride_length = self._robot_manager.stride_length(self._selected_robot_id)
 
-        linear_direction = np.array([0.0, 0.0])
         linear_velocity = np.array([vx, vy])
         linear_speed = np.linalg.norm(linear_velocity)
 
@@ -231,7 +230,7 @@ class RobotManagerNode(Node):
         # Read robot state and publish it
         self._robot_status = self._robot_manager.get_robot_status(self._selected_robot_id)
         self._publish_pose(self._robot_status)
-
+        
         # If joy stick is not valid, return
         if self._is_valid_joy_stick is False:
             return

@@ -55,19 +55,25 @@ class GaitScheduler(Scheduler):
         for leg in leg_group_b:
             self._offset[leg] = 0.5 # 0.5 is the offset for the leg group B
 
-        self._prev_phase: Dict[int, Phase] = {leg: Phase.STANCE for leg in leg_group_a + leg_group_b}
+        self._prev_phase: Dict[int, Phase] = {leg: Phase.STANCE for leg in range(len(leg_group_a + leg_group_b))}
         for leg in self._prev_phase.keys():
-            if self._offset[leg] == 0.0:
+            if self._offset[leg] < 0.5:
                 self._prev_phase[leg] = Phase.SWING
             else:
                 self._prev_phase[leg] = Phase.STANCE
         
         self._events: List[Event] = []
 
+        self._first_step = True
+
 
     @property
     def events(self) -> List[Event]:
         return self._events
+
+    @property
+    def first_step(self) -> bool:
+        return self._first_step
 
 
     def _progress_raw(self, t: float) -> float:
@@ -87,7 +93,7 @@ class GaitScheduler(Scheduler):
 
     def tick(self, frame: ActionFrame) -> bool:
         is_event = False
-        self._events.clear()
+        self._events = []
 
         key = (self._current_state.state, frame.action)
         next_kind = transition_table.get(key, self._current_state.state)
@@ -116,14 +122,18 @@ class GaitScheduler(Scheduler):
                     curr_phase = Phase.STANCE if curr_progress < 0.5 else Phase.SWING
 
                     if prev_phase != curr_phase:
-                        is_event = True
-                        
                         if prev_phase == Phase.STANCE and curr_phase == Phase.SWING:
                             self._events.append(Event(leg=leg, event=EventKind.LIFT_OFF))
                         elif prev_phase == Phase.SWING and curr_phase == Phase.STANCE:
                             self._events.append(Event(leg=leg, event=EventKind.TOUCH_DOWN))
 
                     self._prev_phase[leg] = curr_phase
+
+                if len(self._events) > 0:
+                    is_event = True
+
+                if progress >= 0.5:
+                    self._first_step = False
 
                 if progress >= 1.0:
                     self._t = 0.0
@@ -133,3 +143,6 @@ class GaitScheduler(Scheduler):
 
     def step(self) -> None:
         self._t += self._dt
+
+    def set_first_step(self, first_step: bool) -> None:
+        self._first_step = first_step

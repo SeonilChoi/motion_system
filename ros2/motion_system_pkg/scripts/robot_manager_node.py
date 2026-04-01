@@ -16,7 +16,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from std_msgs.msg import Int8MultiArray
 from sensor_msgs.msg import Joy
-from geometry_msgs.msg import Pose
+from geometry_msgs.msg import Pose, Vector3
 from motion_system_msgs.msg import MotorStatus
 
 
@@ -139,6 +139,12 @@ class RobotManagerNode(Node):
             'pose',
             _pose_qos(),
         )
+        
+        self._joy_cmd_pub = self.create_publisher(
+            Vector3,
+            'joy_cmd',
+            _joy_qos(),
+        )
 
         self._timer = self.create_timer(
             self._robot_manager.dt,
@@ -162,23 +168,20 @@ class RobotManagerNode(Node):
         vy = joy_axes[JoyAxes.LEFT_HORIZONTAL]
         wz = joy_axes[JoyAxes.RIGHT_HORIZONTAL]
         
+        direction = np.zeros(2)
+        
         stride_length = self._robot_manager.stride_length(self._selected_robot_id)
-
+        duration = self._robot_manager.duration(self._selected_robot_id)
+        
         linear_velocity = np.array([vx, vy])
         linear_speed = np.linalg.norm(linear_velocity)
-
-        if linear_speed == 0.0:
-            duration = 10.0
-        else:
-            normalized_linear_speed = np.clip(linear_speed, 0.0, 1.0) * 0.1
-            duration = stride_length / normalized_linear_speed
-
-            linear_direction = linear_velocity / linear_speed
-            linear_velocity = normalized_linear_speed * linear_direction
+        
+        if linear_speed > 0.0:
+            direction = linear_velocity / linear_speed
 
         return ActionFrame(
             action=Action.WALK,
-            goal=np.array([linear_velocity[0], linear_velocity[1], wz]),
+            goal=np.array([direction[0], direction[1], wz]),
             duration=duration,
         )
 
@@ -234,27 +237,31 @@ class RobotManagerNode(Node):
         # If joy stick is not valid, return
         if self._is_valid_joy_stick is False:
             return
-        
+
         # Select robot if up/down direction is changed
         if self._joy_axes[JoyAxes.UP_DOWN_DIRECTION] != 0.0 and self._prev_joy_axes[JoyAxes.UP_DOWN_DIRECTION] == 0.0:
             self._select_robot(self._joy_axes[JoyAxes.UP_DOWN_DIRECTION])
         
         # If robot is stopped, set action to STOP
-        if self._robot_manager.get_state_frame(self._selected_robot_id).state == State.STOPPED:
-            self._curr_action[self._selected_robot_id] = ActionFrame(action=Action.STOP)
+        for robot_id in range(self._number_of_robots):
+            if self._robot_manager.get_state_frame(robot_id).state == State.STOPPED:
+                self._curr_action[robot_id] = ActionFrame(action=Action.STOP)
 
         # Set action based on button press
         for btn, action in self._joy_button_action.items():
             if self._joy_buttons[btn] and not self._prev_joy_buttons[btn]:
-                
-                self.get_logger().info(f"Action: {action}")
-                
                 self._curr_action[self._selected_robot_id] = ActionFrame(action=action)
                 break
 
         # Normalize joy command if action is WALK
         if self._curr_action[self._selected_robot_id].action == Action.WALK:
             self._curr_action[self._selected_robot_id] = self._normalize_joy_command(self._joy_axes)
+
+            joy_cmd = Vector3()
+            joy_cmd.x = self._curr_action[self._selected_robot_id].goal[0]
+            joy_cmd.y = self._curr_action[self._selected_robot_id].goal[1]
+            joy_cmd.z = self._robot_manager.get_state_frame(self._selected_robot_id).progress
+            self._joy_cmd_pub.publish(joy_cmd)
 
         # Set action and get joint commands and publish it
         joint_command = self._robot_manager.set_action_frame(self._curr_action)

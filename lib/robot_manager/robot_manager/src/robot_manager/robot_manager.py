@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import copy
 import yaml
 import numpy as np
 from pathlib import Path
-from typing import Any, List, Mapping, Optional
+from typing import Any, List
 
 from common_robot_interface import ActionFrame, StateFrame
 from common_robot_interface import JointStatus, RobotStatus
 
-from robot_interface.robot import Robot
+from robot_interface.robot import Robot, RobotConfig
 from robot_control.robots.little_reader import LittleReader
 from robot_control.robots.silver_lain import SilverLain
 
@@ -19,37 +20,25 @@ _ROBOT_BY_KEY: dict[str, type[Robot]] = {
 }
 
 
-def _robot_class_for_key(key: str) -> type[Robot]:
-    return _ROBOT_BY_KEY.get(key.lower().replace(' ', '_'), LittleReader)
-
-def _as_array(value: Any) -> Optional[np.ndarray]:
-    if value is None:
-        return None
-    if isinstance(value, (list, tuple)):
-        return [int(x) for x in value]
-    return None
-
-def _home_joint_vector(home_joint_positions: Any) -> np.ndarray:
-    table = home_joint_positions if home_joint_positions is not None else _DEFAULT_HOME_JOINT_RAD
-    arr = np.asarray(table, dtype=np.float64)
-    if arr.shape != (6, 3):
-        raise ValueError(
-            f"home_joint_positions must be 6×3 (six legs, three joints each), got {arr.shape}"
-        )
-    return arr.reshape(-1)
-
-
 class RobotManager:
     def __init__(self, config_file: str) -> None:
-        self._loadConfigurations(config_file)
-
-        self._dt = float(self._config.get('dt', 0.01))
-        self._number_of_motors: int = 0
-        self._number_of_robots = int(self._config.get('number_of_robots', 1))
-        
+        self._config: dict[str, Any] = {}
+        self._dt = 0.01
+        self._number_of_motors = 0
+        self._number_of_robots = 0
         self._robots: List[Robot] = []
-        self._build_robots()
-
+        self._loadConfigurations(config_file)
+    
+        self._home_joint_status = JointStatus(
+            motor_id=np.arange(self._number_of_motors),
+            interface_id=np.concatenate([robot.interface_ids for robot in self._robots]),
+            position=np.concatenate(
+                [np.asarray(robot.home_joint_positions, dtype=np.float64).reshape(-1) for robot in self._robots]
+            ),
+            velocity=np.zeros(self._number_of_motors, dtype=np.float64),
+            torque=np.zeros(self._number_of_motors, dtype=np.float64),
+        )
+        
 
     @property
     def dt(self) -> float:
@@ -65,75 +54,77 @@ class RobotManager:
 
 
     def _loadConfigurations(self, config_file: str) -> None:
-        self._config: dict[str, Any] = {}
         path = Path((config_file or '').strip()).expanduser()
         if not path.is_file():
             return
-        with path.open('r', encoding='utf-8') as f:
-            loaded = yaml.safe_load(f)
-        if loaded is None:
-            return
-        if not isinstance(loaded, Mapping):
-            return
-        self._config = dict(loaded)
 
-    def _build_robots(self) -> None:
-        c, dt = self._config, self._dt
-        rows = c.get('robots')
-        if isinstance(rows, list) and rows:
-            self._robots = []
-            for r in rows:
-                row = dict(r)
-                
-                cls = _robot_class_for_key(str(row.get('robot', 'little_reader')))
-                
-                rid = int(row.get('id', 0))
-                stride = float(row.get('stride_length', 0.0))
-                ctrl = _as_array(row.get('controller_indexes'))
-                interface_ids = _as_array(row.get('interface_ids'))
-                home_joint_positions = _home_joint_vector(row.get('home_joint_positions'))
-                
-                self._robots.append(
-                    cls(
-                        robot_id=rid,
-                        dt=dt,
-                        stride_length=stride,
-                        clearance=float(row.get('clearance', 0.05)),
-                        controller_indexes=ctrl,
-                        interface_ids=interface_ids,
-                        home_joint_positions=home_joint_positions,
-                    )
-                )
-                self._number_of_motors += len(ctrl) if ctrl else 0
-            self._number_of_robots = len(self._robots)
+        raw = yaml.safe_load(path.read_text(encoding='utf-8'))
+        if not isinstance(raw, dict):
             return
+
+        self._config = raw
+        self._dt = float(raw.get('dt', 0.01))
+        dt = self._dt
+        rows = raw.get('robots')
+        if not isinstance(rows, list):
+            return
+
+        robots: List[Robot] = []
+        motors = 0
+
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+
+            ctrl = np.asarray(row['controller_indexes'], dtype=np.int32).reshape(-1).copy()
+            iface = np.asarray(row['interface_ids'], dtype=np.int32).reshape(-1).copy()
+
+            hj = np.asarray(row['home_joint_positions'], dtype=np.float64).reshape(-1).copy()
+            home_pose = np.asarray(row['home_pose'], dtype=np.float64).reshape(-1).copy()
+
+            cfg = RobotConfig(
+                robot_id=int(row.get('id', 0)),
+                dt=dt,
+                stride_length=float(row.get('stride_length', 0.0)),
+                clearance=float(row.get('clearance', 0.05)),
+                controller_indexes=ctrl,
+                interface_ids=iface,
+                home_joint_positions=hj,
+                home_pose=home_pose,
+                duration=float(row.get('duration', 5.0)),
+            )
+            key = str(row.get('robot', 'little_reader')).lower().replace(' ', '_')
+            impl = _ROBOT_BY_KEY.get(key, LittleReader)
+            robots.append(impl(cfg))
+            motors += int(ctrl.size)
+
+        self._robots = robots
+        self._number_of_motors = motors
+        self._number_of_robots = len(robots)
 
 
     def stride_length(self, robot_id: int) -> float:
         return self._robots[robot_id].stride_length
 
+    def duration(self, robot_id: int) -> float:
+        return self._robots[robot_id].duration
+
+
     def get_state_frame(self, robot_id: int) -> StateFrame:
         return self._robots[robot_id].get_state_frame()
 
     def set_action_frame(self, action_frame_list: List[ActionFrame]) -> JointStatus:
-        joint_command = JointStatus(
-            motor_id=np.arange(self._number_of_motors),
-            interface_id=np.zeros(self._number_of_motors, dtype=np.int32),
-            position=np.zeros(self._number_of_motors, dtype=np.float64),
-            velocity=np.zeros(self._number_of_motors, dtype=np.float64),
-            torque=np.zeros(self._number_of_motors, dtype=np.float64),
-        )
-        
+        joint_commands = copy.deepcopy(self._home_joint_status)
+
         for robot_id, frame in enumerate(action_frame_list):
             commands = self._robots[robot_id].set_action_frame(frame)
 
             sel = np.asarray(self._robots[robot_id].controller_indexes, dtype=int)
-            
-            joint_command.motor_id[sel] = self._robots[robot_id].controller_indexes
-            joint_command.interface_id[sel] = np.asarray(self._robots[robot_id].interface_ids, dtype=int)
-            joint_command.position[sel] = commands
+            joint_commands.position[sel] = commands[:, 0]
+            joint_commands.velocity[sel] = commands[:, 1]
+            joint_commands.torque[sel] = commands[:, 2]
 
-        return joint_command
+        return joint_commands
 
     def get_robot_status(self, robot_id: int) -> RobotStatus:
         return self._robots[robot_id].get_robot_status()

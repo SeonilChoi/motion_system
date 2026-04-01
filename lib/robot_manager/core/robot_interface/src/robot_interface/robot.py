@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Optional
+from dataclasses import dataclass, field
+from typing import Any
 
 import numpy as np
 
@@ -9,34 +10,39 @@ from common_robot_interface import ActionFrame, StateFrame
 from common_robot_interface import JointStatus, RobotStatus
 
 
-class Robot(ABC):
-    def __init__(
-        self,
-        robot_id: int,
-        dt: float = 0.01,
-        stride_length: float = 0.0,
-        clearance: float = 0.05,
-        controller_indexes: Optional[list[int]] = None,
-        interface_ids: Optional[list[int]] = None,
-        home_joint_positions: np.ndarray = None,
-    ) -> None:
-        self._robot_id: int = robot_id
-        
-        self._dt: float = dt
-        self._stride_length: float = stride_length
-        self._clearance: float = clearance
-        
-        self._controller_indexes: Optional[list[int]] = (
-            list(controller_indexes) if controller_indexes is not None else None
-        )
-        self._interface_ids: Optional[list[int]] = (
-            list(interface_ids) if interface_ids is not None else None
-        )
-        self._number_of_motors: int = (
-            len(controller_indexes) if controller_indexes is not None else 0
-        )
+@dataclass
+class RobotConfig:
+    """Shared construction parameters for all `Robot` implementations (e.g. from YAML)."""
 
-        self._home_joint_positions: np.ndarray = home_joint_positions
+    robot_id: int = 0
+    dt: float = 0.01
+    stride_length: float = 0.0
+    clearance: float = 0.05
+    duration: float = 5.0
+    controller_indexes: Any = field(default_factory=lambda: np.zeros(0, dtype=np.int32))
+    interface_ids: Any = field(default_factory=lambda: np.zeros(0, dtype=np.int32))
+    home_joint_positions: Any = field(default_factory=lambda: np.zeros(0, dtype=np.float64))
+    home_pose: Any = field(default_factory=lambda: np.zeros(6, dtype=np.float64))
+
+
+class Robot(ABC):
+    def __init__(self, config: RobotConfig) -> None:
+        self._robot_config: RobotConfig = config
+        c = config
+
+        self._robot_id: int = c.robot_id
+        self._dt: float = c.dt
+        self._stride_length: float = c.stride_length
+        self._clearance: float = c.clearance
+        self._duration: float = c.duration
+
+        self._controller_indexes = np.asarray(c.controller_indexes, dtype=np.int32).reshape(-1).copy()
+        self._interface_ids = np.asarray(c.interface_ids, dtype=np.int32).reshape(-1).copy()
+        self._number_of_motors: int = int(self._controller_indexes.size)
+
+        self._home_joint_positions = np.asarray(c.home_joint_positions, dtype=np.float64).reshape(-1).copy()
+        self._home_pose = np.asarray(c.home_pose, dtype=np.float64).reshape(-1).copy()
+
 
     @property
     def robot_id(self) -> int:
@@ -51,13 +57,29 @@ class Robot(ABC):
         return self._clearance
 
     @property
-    def controller_indexes(self) -> Optional[list[int]]:
+    def duration(self) -> float:
+        return self._duration
+
+    @property
+    def controller_indexes(self) -> np.ndarray:
         return self._controller_indexes
 
     @property
-    def interface_ids(self) -> Optional[list[int]]:
+    def interface_ids(self) -> np.ndarray:
         return self._interface_ids
 
+    @property
+    def number_of_motors(self) -> int:
+        return self._number_of_motors
+
+    @property
+    def home_joint_positions(self) -> Any:
+        return self._home_joint_positions
+    
+    @property
+    def home_pose(self) -> Any:
+        return self._home_pose
+    
 
     @abstractmethod
     def get_state_frame(self) -> StateFrame:

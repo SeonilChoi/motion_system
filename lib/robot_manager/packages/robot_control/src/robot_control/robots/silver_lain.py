@@ -1,13 +1,13 @@
 from __future__ import annotations
 
-from typing import Any, List, Optional, Tuple
+from typing import List, Tuple
 
 import numpy as np
 
 from common_robot_interface import Action, ActionFrame, State, StateFrame
 from common_robot_interface import JointStatus, RobotStatus
 
-from robot_interface.robot import Robot
+from robot_interface.robot import Robot, RobotConfig
 from robot_control.scheduler.gait_scheduler import Event, EventKind, GaitScheduler
 from robot_control.planner.gait_trajectory_planner import GaitTrajectoryPlanner
 from robot_control.kinematics.silver_lain_solver import SilverLainSolver
@@ -19,42 +19,17 @@ LEG_GROUP_B = [1, 3, 5]
 
 LINK_LIST = [0.32, 0.0, 0.615, 1.25]
 
-# Default home pose (rad): legs 0,2,4 → 0, 40°, 140°; legs 1,3,5 → 0, -40°, -140°.
-_R40 = 0.6981317007977318
-_R140 = 2.443460952792061
-_DEFAULT_HOME_JOINT_RAD = np.array(
-    [
-        [0.0, _R40, _R140],
-        [0.0, -_R40, -_R140],
-        [0.0, _R40, _R140],
-        [0.0, -_R40, -_R140],
-        [0.0, _R40, _R140],
-        [0.0, -_R40, -_R140],
-    ],
-    dtype=np.float64,
-)
-
 
 class SilverLain(Robot):
-    def __init__(
-        self,
-        robot_id: int = 0,
-        dt: float = 0.01,
-        stride_length: float = 0.0,
-        clearance: float = 0.05,
-        controller_indexes: Optional[list[int]] = None,
-        interface_ids: Optional[list[int]] = None,
-        home_joint_positions: Any = None,
-    ) -> None:
-        super().__init__(robot_id, dt, stride_length, clearance, controller_indexes, interface_ids, home_joint_positions)
+    def __init__(self, config: RobotConfig) -> None:
+        super().__init__(config)
 
         # Gait Scheduler Variables
-        self._events : List[Event] = []
+        self._events : Optional[List[Event]] = None
         self._scheduler = GaitScheduler(self._dt, LEG_GROUP_A, LEG_GROUP_B)
         
         # Gait Trajectory Planner Variables
-        self._first_step = True
-        self._trajectory_planner = GaitTrajectoryPlanner(self._clearance)
+        self._trajectory_planner = [GaitTrajectoryPlanner(self._clearance, self._duration) for _ in range(6)]
 
         # Kinematic Solver Variables
         self._kinematic_solver = SilverLainSolver(LINK_LIST)
@@ -62,106 +37,115 @@ class SilverLain(Robot):
         # Robot Variables
         self._curr_joint_status: JointStatus = JointStatus(
             motor_id=np.asarray(self._controller_indexes, dtype=np.int8),
-            position=np.zeros(self._number_of_motors, dtype=np.float64),
+            position=self._home_joint_positions.copy(),
             velocity=np.zeros(self._number_of_motors, dtype=np.float64),
             torque=np.zeros(self._number_of_motors, dtype=np.float64),
         )
 
+        home_point = self._kinematic_solver.forward_with_pose(self._home_pose.copy(), self._home_joint_positions.copy())
         self._curr_robot_state: RobotStatus = RobotStatus(
             robot_id=self._robot_id,
-            pose=np.zeros(6, dtype=np.float64),
-            point=np.zeros((6, 3), dtype=np.float64),
+            pose=self._home_pose.copy(),
+            point=home_point.copy(),
             twist=np.zeros(6, dtype=np.float64),
             wrench=np.zeros(6, dtype=np.float64),
         )
 
+        self._test_initial_point = np.zeros((6, 3), dtype=np.float64)
+        self._test_current_robot_state_pose = np.zeros(6, dtype=np.float64)
+        self._test_current_joint_status_position = np.zeros(18, dtype=np.float64)
+
 
     def _compute_next_target(self, duration: float, goal: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-        duration = duration * 0.5 if self._first_step else duration
-        stride_length = self._stride_length * 0.5 if self._first_step else self._stride_length
-        
-        vx, vy, wz = goal[0], goal[1], goal[2]
+        stride_length = self._stride_length * 0.5 if self._scheduler.first_step else self._stride_length
+
+        direction = np.array([goal[0], goal[1]])
+        linear_velocity = stride_length / (duration * 0.5) * direction
+
+        vx, vy, wz = linear_velocity[0], linear_velocity[1], goal[2]
 
         theta = self._curr_robot_state.pose[5] # orientation.z
         dx = (vx * np.cos(theta) - vy * np.sin(theta)) * self._dt
         dy = (vx * np.sin(theta) + vy * np.cos(theta)) * self._dt
         dw = wz * self._dt
 
-        remaining_time = (1.0 - self._scheduler.current_state.progress) * duration
+        if self._scheduler.current_state.progress == 0.5:
+            subprogress = 1.0
+        elif self._scheduler.current_state.progress == 1.0:
+            subprogress = 1.0
+        elif self._scheduler.current_state.progress < 0.5:
+            subprogress = self._scheduler.current_state.progress / 0.5
+        else:
+            subprogress = (self._scheduler.current_state.progress - 0.5) / 0.5
+
+        remaining_time = (1.0 - subprogress) * (duration * 0.5)
         gx = (vx * np.cos(theta) - vy * np.sin(theta)) * remaining_time
         gy = (vx * np.sin(theta) + vy * np.cos(theta)) * remaining_time
         gw = 0
 
-        p = self._curr_robot_state.pose
-        goal_pose = np.array(
-            [
-                p[0] + gx,
-                p[1] + gy,
-                p[2],
-                p[3],
-                p[4],
-                p[5] + gw,
-            ],
-            dtype=np.float64,
-        )
+        goal_pose = self._curr_robot_state.pose.copy()
+        goal_pose[0] += gx
+        goal_pose[1] += gy
+        goal_pose[5] += gw
 
-        goal_point = self._kinematic_solver.forward_with_pose(goal_pose, self._home_joint_positions)
-        goal_point[:, 0] += gx
-        goal_point[:, 1] += gy
-        goal_point[:, 2] = 0.0
+        goal_point = self._kinematic_solver.forward_with_pose(goal_pose.copy(), self._home_joint_positions.copy())
+        forward_position = (self.stride_length * 0.5) * direction
+        goal_point[:, :2] += forward_position
+        goal_point[:, -1] = 0.0
 
+        target_pose = self._curr_robot_state.pose.copy()
+        target_pose[0] += dx
+        target_pose[1] += dy
+        target_pose[5] += dw
+
+        target_points = np.zeros((6, 3), dtype=np.float64)
         for e in self._events:
             if e.event == EventKind.TOUCH_DOWN:
-                goal_point[e.leg] = self._trajectory_planner.initial_state[e.leg]
+                self._trajectory_planner[e.leg].update_goal_state(self._trajectory_planner[e.leg].initial_state, 0.0, duration * 0.5)
+            else:
+                self._trajectory_planner[e.leg].update_goal_state(goal_point[e.leg], self._clearance, duration * 0.5)
 
-        self._trajectory_planner.update_goal_state(goal_point, duration)
+            target_points[e.leg] = self._trajectory_planner[e.leg].eval(subprogress)
 
-        p = self._curr_robot_state.pose
-        target_pose = np.array(
-            [
-                p[0] + dx,
-                p[1] + dy,
-                p[2],
-                p[3],
-                p[4],
-                p[5] + dw,
-            ],
-            dtype=np.float64,
-        )
-
-        target_points = self._trajectory_planner.eval(self._scheduler.current_state.progress)
         return target_pose, target_points
     
+
     def get_state_frame(self) -> StateFrame:
         return self._scheduler.current_state
 
     def set_action_frame(self, frame: ActionFrame) -> np.ndarray:
-        target_position = self._curr_joint_status.position.copy()
+        commands = np.zeros((self._number_of_motors, 3))
+        commands[:, 0] = self._curr_joint_status.position.copy()
         
         if frame.action == Action.HOME:
-            self._first_step = True
+            self._scheduler.set_first_step(True)
 
         event = self._scheduler.tick(frame)
+
+        if frame.action == Action.WALK and event and len(self._scheduler._events) > 0:
+            self._events = list(self._scheduler._events)
+            initial_point = self._kinematic_solver.forward_with_pose(self._curr_robot_state.pose.copy(), self._curr_joint_status.position.copy())
+            self._test_current_robot_state_pose = self._curr_robot_state.pose.copy()
+            self._test_current_joint_status_position = self._curr_joint_status.position.copy()
+            self._test_initial_point = initial_point.copy()
+            for i in range(6):
+                self._trajectory_planner[i].set_initial_state(initial_point[i])
         
-        if frame.action == Action.WALK:
-            if event:
-                self._events = self._scheduler.events
-                current_point = self._kinematic_solver.forward_with_pose(self._curr_robot_state.pose, self._curr_joint_status.position)
-                self._trajectory_planner.set_initial_state(current_point)
-    
+        if frame.action == Action.WALK and self._events is not None:
             target_pose, target_point = self._compute_next_target(frame.duration, frame.goal)
 
-            target_position = self._kinematic_solver.inverse_with_pose(target_pose, target_point)
+            target_position = self._kinematic_solver.inverse_with_pose(target_pose.copy(), target_point.copy())
+            commands[:, 0] = target_position.copy()
 
             # For test
-            self._curr_robot_state.pose = target_pose
-            self._curr_robot_state.point = target_point
-            self._curr_joint_status.position = target_position
+            self._curr_robot_state.pose = target_pose.copy()
+            self._curr_robot_state.point = target_point.copy()
+            self._curr_joint_status.position = target_position.copy()
 
         if frame.action == Action.WALK and not np.all(frame.goal == 0.0):
             self._scheduler.step()
 
-        return target_position
+        return commands
 
     def get_robot_status(self) -> RobotStatus:
         return self._curr_robot_state

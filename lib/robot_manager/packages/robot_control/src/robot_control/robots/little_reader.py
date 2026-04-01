@@ -1,38 +1,20 @@
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Optional
 
 import numpy as np
 
 from common_robot_interface import ActionFrame, JointStatus, RobotStatus, StateFrame
 
-from robot_interface.robot import Robot
+from robot_interface.robot import Robot, RobotConfig
 
 from robot_control.scheduler.fsm_scheduler import FsmScheduler
 
 
 class LittleReader(Robot):
-    def __init__(
-        self,
-        robot_id: int = 0,
-        dt: float = 0.01,
-        stride_length: float = 0.0,
-        clearance: float = 0.05,
-        controller_indexes: Optional[list[int]] = None,
-        interface_ids: Optional[list[int]] = None,
-        home_joint_positions: Any = None,
-    ) -> None:
-        super().__init__(
-            robot_id,
-            dt,
-            stride_length,
-            clearance,
-            controller_indexes,
-            interface_ids,
-            home_joint_positions,
-        )
-        self._home_joint_positions = home_joint_positions
-        self._scheduler = FsmScheduler(dt)
+    def __init__(self, config: RobotConfig) -> None:
+        super().__init__(config)
+        self._scheduler = FsmScheduler(config.dt)
         self._curr_joint_status: Optional[JointStatus] = None
 
     def get_state_frame(self) -> StateFrame:

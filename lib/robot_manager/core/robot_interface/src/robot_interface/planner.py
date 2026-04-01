@@ -14,12 +14,12 @@ class TrajectoryPlanner(ABC):
 
     @property
     def initial_state(self) -> np.ndarray | None:
-        return None if self._init_state is None else self._init_state
+        return None if self._init_state is None else self._init_state.copy()
 
 
-    @abstractmethod
     def set_initial_state(self, initial_state: np.ndarray) -> None:
         self._init_state = initial_state.copy()
+
 
     @abstractmethod
     def update_goal_state(self, goal_state: np.ndarray) -> None:
@@ -31,13 +31,13 @@ class TrajectoryPlanner(ABC):
 
 
     @staticmethod
-    def _quintic_time_scaling(s : float or List[float]) -> float or List[float]:
+    def _quintic_time_scaling(s : float) -> float:
         s = float(np.clip(s, 0.0, 1.0))
         s = (10.0 * s**3) - (15.0 * s**4) + (6.0 * s**5)
         return s
 
     @staticmethod
-    def _parabolic_time_scaling(s : float or List[float]) -> float or List[float]:
+    def _parabolic_time_scaling(s : float) -> float:
         s = float(np.clip(s, 0.0, 1.0))
         s = s * (1.0 - s) * 4.0
         return s

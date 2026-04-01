@@ -1,0 +1,24 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.so
+.Python
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+.eggs/
+dist/
+build/
+
+# --- Collected / binary data (test_pkg) ---
+ros2/test_pkg/data/**/*.npy
+ros2/test_pkg/data/**/*.npz
+ros2/test_pkg/data/**/__pycache__/
+ros2/test_pkg/data/**/*.pyc
+
+# Optional: ignore everything under data except a placeholder (uncomment if desired)
+# ros2/test_pkg/data/*
+# !ros2/test_pkg/data/.gitkeep

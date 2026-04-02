@@ -13,7 +13,7 @@ src/
 ├── lib/
 │   ├── robot_manager/              # ament_cmake wrapper + nested Python packages
 │   │   ├── core/robot_interface/   # abstract Robot + Scheduler
-│   │   ├── packages/robot_control/ # FSM/gait schedulers, concrete robots
+│   │   ├── kinematics/ planner/ scheduler/ robots/  # Python behavior packages
 │   │   └── robot_manager/          # RobotManager, YAML + joystick mapping
 │   └── motor_manager/              # ament_cmake: EtherCAT + MINAS + MotorManager
 │       ├── core/motor_interface/   # MotorMaster / MotorController / MotorDriver

@@ -10,8 +10,8 @@ from common_robot_interface import ActionFrame, StateFrame
 from common_robot_interface import JointStatus, RobotStatus
 
 from robot_interface.robot import Robot, RobotConfig
-from robot_control.robots.little_reader import LittleReader
-from robot_control.robots.silver_lain import SilverLain
+from robots.little_reader import LittleReader
+from robots.silver_lain import SilverLain
 
 
 _ROBOT_BY_KEY: dict[str, type[Robot]] = {

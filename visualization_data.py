@@ -4,12 +4,82 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+from typing import NamedTuple
 
 import matplotlib.pyplot as plt
 import numpy as np
 from matplotlib.animation import FuncAnimation
 
 ROOT_DIR = Path(__file__).resolve().parent
+
+# Split files from ros2/test_pkg/test_pkg/data_collector_node.py (order for hstack)
+_SPLIT_STEMS: tuple[str, ...] = (
+    "position",
+    "orientation",
+    "direction",
+    "progress",
+    "target_contact",
+    "target_position",
+    "target_orientaiton",
+    "target_linear_velocity",
+    "target_angular_velocity",
+    "target_joint_position",
+    "target_joint_velocity",
+)
+
+# Must match data_collector_node. On disk: position / target_position z += POSE_Z_OFFSET;
+# joint position = offset + reorder + direction; joint velocity = reorder + direction only.
+# Inverses below used for FK / animation where solver expects incoming obs frame.
+_POSE_Z_OFFSET = np.float32(-0.7788)
+_JOINT_POS_OFFSET = np.array(
+    [
+        0.0,
+        0.6981317007977318,
+        -2.443460952792061,
+        0.0,
+        0.6981317007977318,
+        -2.443460952792061,
+        0.0,
+        0.6981317007977318,
+        -2.443460952792061,
+        0.0,
+        -0.6981317007977318,
+        2.443460952792061,
+        0.0,
+        -0.6981317007977318,
+        2.443460952792061,
+        0.0,
+        -0.6981317007977318,
+        2.443460952792061,
+    ],
+    dtype=np.float64,
+)
+_JOINT_REORDER = np.array(
+    [15, 12, 9, 6, 3, 0, 16, 13, 10, 7, 4, 1, 17, 14, 11, 8, 5, 2],
+    dtype=np.intp,
+)
+_JOINT_DIRECTION = np.array(
+    [-1, -1, -1, -1, -1, -1, 1, 1, 1, 1, 1, 1, -1, -1, -1, 1, 1, 1],
+    dtype=np.float64,
+)
+_INV_JOINT_REORDER = np.empty(18, dtype=np.intp)
+_INV_JOINT_REORDER[_JOINT_REORDER] = np.arange(18, dtype=np.intp)
+
+
+def _translation_from_storage(t: np.ndarray) -> np.ndarray:
+    """Remove z offset saved on disk (obs frame for SilverLain FK)."""
+    x = np.asarray(t, dtype=np.float64).copy()
+    x[:, 2] = x[:, 2] - float(_POSE_Z_OFFSET)
+    return x
+
+
+def _joint_positions_from_storage(stored: np.ndarray) -> np.ndarray:
+    """Invert offset → reorder → direction to get SilverLain solver joint order."""
+    b = np.asarray(stored, dtype=np.float64) / _JOINT_DIRECTION
+    a = b[:, _INV_JOINT_REORDER]
+    return a - _JOINT_POS_OFFSET
+
+
 PI = np.pi
 R30 = PI / 6
 R60 = PI / 3
@@ -104,100 +174,109 @@ def _default_data_dir() -> Path:
 
 
 def _stem_sort_key(stem: str) -> tuple:
-    """Order: numeric tags 1,2,… then non-numeric lexicographically."""
     if stem.isdigit():
         return (0, int(stem), "")
     return (1, stem, "")
 
 
-def _paired_action_path(data_dir: Path, obs_path: Path) -> Path:
-    stem = obs_path.name[: -len("_obs.npy")]
-    return data_dir / f"{stem}_action.npy"
+def _split_bundle_path(data_dir: Path, prefix: str, stem: str) -> Path:
+    """``data_dir / prefix / stem.npy`` (per-run folder) or flat ``prefix_stem.npy``."""
+    if prefix:
+        sub = data_dir / prefix
+        if sub.is_dir():
+            return sub / f"{stem}.npy"
+        return data_dir / f"{prefix}_{stem}.npy"
+    return data_dir / f"{stem}.npy"
 
 
-def _list_ordered_dataset_pairs(data_dir: Path) -> list[tuple[Path, Path, str]]:
-    """All valid (obs, action, stem) pairs: plain obs.npy first, then *_obs.npy by stem order."""
+def _try_load_split_bundle(data_dir: Path, prefix: str) -> dict[str, np.ndarray] | None:
+    paths = {s: _split_bundle_path(data_dir, prefix, s) for s in _SPLIT_STEMS}
+    if not paths["position"].is_file():
+        return None
+    if not all(p.is_file() for p in paths.values()):
+        return None
+    arrays: dict[str, np.ndarray] = {}
+    for k, p in paths.items():
+        arrays[k] = np.load(p)
+    n = int(arrays["position"].shape[0])
+    for k in _SPLIT_STEMS:
+        a = arrays[k]
+        if a.ndim == 1:
+            arrays[k] = a.reshape(n, -1)
+        elif a.ndim != 2:
+            raise ValueError(f"{k}: expected 1D or 2D, got {a.shape}")
+        if arrays[k].shape[0] != n:
+            raise ValueError(f"{k}: expected {n} rows, got {arrays[k].shape[0]}")
+    return arrays
+
+
+def _split_bundle_max_mtime(data_dir: Path, prefix: str) -> float:
+    return max(_split_bundle_path(data_dir, prefix, s).stat().st_mtime for s in _SPLIT_STEMS)
+
+
+def _list_split_prefixes(data_dir: Path) -> list[str]:
     data_dir = data_dir.expanduser().resolve()
-    if not data_dir.is_dir():
-        raise FileNotFoundError(f"Data directory does not exist: {data_dir}")
-
-    out: list[tuple[Path, Path, str]] = []
-    plain_obs = data_dir / "obs.npy"
-    plain_act = data_dir / "action.npy"
-    if plain_obs.is_file() and plain_act.is_file():
-        out.append((plain_obs, plain_act, ""))
-
-    tagged_obs = [p for p in data_dir.glob("*_obs.npy") if p.name != "obs.npy"]
-    tagged_obs.sort(key=lambda p: _stem_sort_key(p.name[: -len("_obs.npy")]))
-
-    for obs_p in tagged_obs:
-        stem = obs_p.name[: -len("_obs.npy")]
-        act_p = _paired_action_path(data_dir, obs_p)
-        if act_p.is_file():
-            out.append((obs_p, act_p, stem))
-
-    return out
+    out: set[str] = set()
+    if _try_load_split_bundle(data_dir, "") is not None:
+        out.add("")
+    for sub in data_dir.iterdir():
+        if sub.is_dir() and not sub.name.startswith("."):
+            if _try_load_split_bundle(data_dir, sub.name) is not None:
+                out.add(sub.name)
+    for p in data_dir.glob("*_position.npy"):
+        prefix = p.name[: -len("_position.npy")]
+        if prefix and _try_load_split_bundle(data_dir, prefix) is not None:
+            out.add(prefix)
+    return sorted(out, key=_stem_sort_key)
 
 
-def _resolve_obs_action_paths(data_dir: Path, tag: str | None) -> tuple[Path, Path, str | None]:
-    """Return (obs_path, action_path, stem_prefix). stem_prefix is '' for obs.npy or '1' for 1_obs.npy."""
-    data_dir = data_dir.expanduser().resolve()
-    if not data_dir.is_dir():
-        raise FileNotFoundError(f"Data directory does not exist: {data_dir}")
-
-    if tag is not None:
-        prefix = tag.strip()
-        obs_p = data_dir / f"{prefix}_obs.npy"
-        act_p = data_dir / f"{prefix}_action.npy"
-        if obs_p.is_file() and act_p.is_file():
-            return obs_p, act_p, prefix
-        raise FileNotFoundError(
-            f"With --tag {prefix!r}, expected {obs_p.name} and {act_p.name} under {data_dir}"
-        )
-
-    plain_obs = data_dir / "obs.npy"
-    plain_act = data_dir / "action.npy"
-    if plain_obs.is_file() and plain_act.is_file():
-        return plain_obs, plain_act, ""
-
-    candidates = sorted(data_dir.glob("*_obs.npy"))
-    if not candidates:
-        raise FileNotFoundError(
-            f"No obs.npy / action.npy or *_obs.npy in {data_dir}. "
-            f"Collect data or pass --tag (e.g. --tag 1 for 1_obs.npy)."
-        )
-
-    valid = [(o, _paired_action_path(data_dir, o)) for o in candidates if _paired_action_path(data_dir, o).is_file()]
-    if not valid:
-        raise FileNotFoundError(f"No matching *_action.npy for files in {data_dir}")
-
-    obs_path, action_path = max(valid, key=lambda pair: pair[0].stat().st_mtime)
-    stem = obs_path.name[: -len("_obs.npy")]
-    return obs_path, action_path, stem
+def _hstack_from_split(parts: dict[str, np.ndarray]) -> np.ndarray:
+    return np.hstack([parts[s] for s in _SPLIT_STEMS])
 
 
-def _load_one_pair(
-    obs_path: Path, action_path: Path, stem: str
-) -> tuple[np.ndarray, np.ndarray, np.ndarray | None]:
-    obs = np.load(obs_path)
-    action = np.load(action_path)
-    if obs.ndim != 2 or action.ndim != 2:
-        raise ValueError(f"{obs_path.name} and {action_path.name} must be 2D arrays")
-    if obs.shape[0] != action.shape[0]:
-        raise ValueError("obs and action must have the same number of samples")
+def _merge_split_prefixes(data_dir: Path, prefixes: list[str]) -> tuple[dict[str, np.ndarray], list[tuple[int, int, str]]]:
+    blocks: list[dict[str, np.ndarray]] = []
+    segments: list[tuple[int, int, str]] = []
+    pos = 0
+    for prefix in prefixes:
+        d = _try_load_split_bundle(data_dir, prefix)
+        if d is None:
+            raise RuntimeError(f"incomplete split bundle for prefix {prefix!r}")
+        n = d["position"].shape[0]
+        blocks.append(d)
+        label = prefix if prefix else "split"
+        segments.append((pos, pos + n, label))
+        pos += n
+    merged: dict[str, np.ndarray] = {}
+    for k in _SPLIT_STEMS:
+        merged[k] = np.vstack([b[k] for b in blocks])
+    return merged, segments
 
-    cond_name = f"{stem}_condition.npy" if stem else "condition.npy"
-    cond_path = obs_path.parent / cond_name
-    condition: np.ndarray | None = None
-    if cond_path.is_file():
+
+def _load_condition_file(data_dir: Path, stem: str, n_rows: int) -> np.ndarray | None:
+    candidates: list[Path] = []
+    if stem:
+        candidates.append(data_dir / stem / "condition.npy")
+    candidates.append(data_dir / (f"{stem}_condition.npy" if stem else "condition.npy"))
+    for cond_path in candidates:
+        if not cond_path.is_file():
+            continue
         c = np.load(cond_path)
-        if c.ndim == 2 and c.shape[0] == obs.shape[0]:
-            condition = c
-        else:
-            print(
-                f"Skipping {cond_path.name}: expected 2D array with {obs.shape[0]} rows, got {getattr(c, 'shape', None)}"
-            )
-    return obs, action, condition
+        if c.ndim == 2 and c.shape[0] == n_rows:
+            return c
+        print(
+            f"Skipping {cond_path}: expected 2D with {n_rows} rows, got {getattr(c, 'shape', None)}"
+        )
+    return None
+
+
+class LoadedDataset(NamedTuple):
+    """Hstacked features + per-field arrays from data_collector split .npy bundles."""
+
+    obs: np.ndarray
+    condition: np.ndarray | None
+    segments: list[tuple[int, int, str]]
+    split_parts: dict[str, np.ndarray]
 
 
 def _load_dataset(
@@ -205,132 +284,97 @@ def _load_dataset(
     tag: str | None = None,
     *,
     latest_only: bool = False,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray | None, list[tuple[int, int, str]]]:
-    """
-    Load obs/action (+ optional condition). Returns segment list (start, end_exclusive, label)
-    for HUD when multiple files are concatenated.
-    """
+) -> LoadedDataset:
     base = data_dir if data_dir is not None else _default_data_dir()
 
     if tag is not None:
-        obs_path, action_path, used_tag = _resolve_obs_action_paths(base, tag)
-        obs, action, condition = _load_one_pair(obs_path, action_path, used_tag)
-        label = f"{used_tag}_" if used_tag else ""
-        print(f"Loaded {label}obs / {label}action from {obs_path.parent} ({obs.shape[0]} samples)")
-        if condition is not None:
-            print(f"Loaded {label}condition {condition.shape}")
-        seg_label = used_tag if used_tag else "obs"
-        return obs, action, condition, [(0, obs.shape[0], seg_label)]
+        prefix = tag.strip()
+        d = _try_load_split_bundle(base, prefix)
+        if d is None:
+            loc = f"{base.name}/{prefix}/" if prefix else f"{base.name}/"
+            raise FileNotFoundError(
+                f"No split bundle for --tag {prefix!r} (expected 11 arrays under {loc} or flat {prefix}_*.npy)."
+            )
+        n = d["position"].shape[0]
+        obs = _hstack_from_split(d)
+        cond = _load_condition_file(base, prefix, n)
+        loc = f"{base.name}/{prefix}/" if prefix else f"{base.name}/"
+        print(f"Loaded split bundle {loc}… ({n} samples)")
+        if cond is not None:
+            print(f"Loaded condition {cond.shape}")
+        return LoadedDataset(obs, cond, [(0, n, prefix or "split")], d)
 
-    pairs = _list_ordered_dataset_pairs(base)
-    if not pairs:
-        raise FileNotFoundError(
-            f"No obs.npy / action.npy or paired *_obs.npy in {base}. "
-            f"Collect data or pass --tag (e.g. --tag 1 for 1_obs.npy)."
+    split_prefixes = _list_split_prefixes(base)
+    if split_prefixes:
+        if latest_only and len(split_prefixes) > 1:
+            prefix = max(split_prefixes, key=lambda pr: _split_bundle_max_mtime(base, pr))
+            d = _try_load_split_bundle(base, prefix)
+            assert d is not None
+            n = d["position"].shape[0]
+            obs = _hstack_from_split(d)
+            cond = _load_condition_file(base, prefix, n)
+            loc = f"{base.name}/{prefix}/" if prefix else f"{base.name}/"
+            print(f"Loaded (--latest-only) split {loc}… ({n} samples)")
+            return LoadedDataset(obs, cond, [(0, n, prefix or "split")], d)
+
+        merged, segments = _merge_split_prefixes(base, split_prefixes)
+        obs = _hstack_from_split(merged)
+        n = obs.shape[0]
+        cond_blocks: list[tuple[int, np.ndarray | None]] = []
+        pos = 0
+        for s, e, lab in segments:
+            nn = e - s
+            c = _load_condition_file(base, lab if lab != "split" else "", nn)
+            cond_blocks.append((nn, c))
+            pos += nn
+
+        condition = None
+        cond_widths = {c.shape[1] for _, c in cond_blocks if c is not None}
+        if len(cond_widths) == 1:
+            cd = cond_widths.pop()
+            parts_c: list[np.ndarray] = []
+            for nn, c in cond_blocks:
+                if c is not None and c.shape[1] == cd:
+                    parts_c.append(c)
+                else:
+                    parts_c.append(np.full((nn, cd), np.nan, dtype=np.float64))
+            condition = np.vstack(parts_c)
+        print(
+            f"Loaded {len(split_prefixes)} split run(s) from {base} → {n} samples "
+            f"(order: {[s[2] for s in segments]})"
         )
-
-    if latest_only and len(pairs) > 1:
-        obs_path, action_path, stem = max(pairs, key=lambda x: x[0].stat().st_mtime)
-        obs, action, condition = _load_one_pair(obs_path, action_path, stem)
-        label = f"{stem}_" if stem else ""
-        print(f"Loaded (--latest-only) {label}obs / {label}action ({obs.shape[0]} samples)")
         if condition is not None:
-            print(f"Loaded {label}condition {condition.shape}")
-        return obs, action, condition, [(0, obs.shape[0], stem if stem else "obs")]
+            print(f"Merged condition {condition.shape}")
+        return LoadedDataset(obs, condition, segments, merged)
 
-    obs_blocks: list[np.ndarray] = []
-    action_blocks: list[np.ndarray] = []
-    segments: list[tuple[int, int, str]] = []
-    cond_blocks: list[tuple[int, np.ndarray | None]] = []
-
-    pos = 0
-    for obs_path, action_path, stem in pairs:
-        o, a, c = _load_one_pair(obs_path, action_path, stem)
-        if obs_blocks:
-            if o.shape[1] != obs_blocks[0].shape[1] or a.shape[1] != action_blocks[0].shape[1]:
-                raise ValueError(
-                    f"Feature mismatch: {obs_path.name} obs{o.shape} vs first {obs_blocks[0].shape}; "
-                    "all runs must share the same obs/action widths."
-                )
-        obs_blocks.append(o)
-        action_blocks.append(a)
-        n = o.shape[0]
-        seg_label = stem if stem else "obs"
-        segments.append((pos, pos + n, seg_label))
-        pos += n
-        cond_blocks.append((n, c))
-
-    obs = np.vstack(obs_blocks)
-    action = np.vstack(action_blocks)
-    print(f"Loaded {len(pairs)} run(s) from {base} → {obs.shape[0]} samples total (order: {[s[2] for s in segments]})")
-
-    condition = None
-    cond_widths = {c.shape[1] for _, c in cond_blocks if c is not None}
-    if len(cond_widths) == 1:
-        cd = cond_widths.pop()
-        parts: list[np.ndarray] = []
-        for n, c in cond_blocks:
-            if c is not None and c.shape[1] == cd:
-                parts.append(c)
-            else:
-                parts.append(np.full((n, cd), np.nan, dtype=np.float64))
-        condition = np.vstack(parts)
-        print(f"Merged condition {condition.shape} (NaN rows where a run has no condition file)")
-    elif len(cond_widths) > 1:
-        print("Condition column counts differ between runs; skipping merged condition.")
-
-    return obs, action, condition, segments
+    raise FileNotFoundError(
+        f"No split dataset in {base}: need ``position.npy`` (and 10 siblings) in a subfolder or flat, "
+        f"e.g. ``data/1/position.npy`` or ``data/1_position.npy``. See data_collector_node."
+    )
 
 
 def _segment_info(
     segments: list[tuple[int, int, str]], frame_idx: int
 ) -> tuple[str, int, int]:
-    """Return (label, local_index, segment_length)."""
     for s, e, label in segments:
         if s <= frame_idx < e:
             return label, frame_idx - s, e - s
     return "?", frame_idx, 0
 
 
-def _split_obs(obs: np.ndarray, action_dim: int) -> dict[str, np.ndarray | None]:
-    """Parse obs layout: legacy pose(6)+prev_motor(M), or full pose+pose_vel+prev_motor+prev_motor_vel."""
-    n = obs.shape[1]
-    legacy = 6 + action_dim
-    with_vel = 12 + 2 * action_dim
-    if n == legacy:
-        return {
-            "pose": obs[:, :6],
-            "pose_vel": None,
-            "prev_motor": obs[:, 6 : 6 + action_dim],
-            "prev_motor_vel": None,
-        }
-    if n >= with_vel:
-        return {
-            "pose": obs[:, :6],
-            "pose_vel": obs[:, 6:12],
-            "prev_motor": obs[:, 12 : 12 + action_dim],
-            "prev_motor_vel": obs[:, 12 + action_dim : 12 + 2 * action_dim],
-        }
-    raise ValueError(
-        f"obs feature dim {n} does not match action_dim={action_dim}: "
-        f"expected legacy {legacy} or new >= {with_vel}"
-    )
-
-
-def _obs_position_slices(obs: np.ndarray, action_dim: int) -> tuple[np.ndarray, np.ndarray]:
-    """Extract pose (6) and prev motor positions (M) only; ignore velocity blocks in obs."""
-    s = _split_obs(obs, action_dim)
-    return s["pose"], s["prev_motor"]
+def _pose_and_joints_from_dataset(ds: LoadedDataset) -> tuple[np.ndarray, np.ndarray]:
+    p = ds.split_parts
+    pose = np.hstack([_translation_from_storage(p["position"]), p["orientation"]])
+    q = _joint_positions_from_storage(p["target_joint_position"])
+    return pose, q
 
 
 def _plot_base_trajectory_2d(pose: np.ndarray, segments: list[tuple[int, int, str]]) -> None:
-    """Plan-view path: body X on vertical (bottom→up), body Y on horizontal (right→left positive)."""
     bx = pose[:, 0]
     by = pose[:, 1]
     n = pose.shape[0]
     frames = np.arange(n)
 
-    # Matplotlib: horizontal = by, vertical = bx → X reads upward, Y grows toward the left.
     fig, ax = plt.subplots(figsize=(8, 7))
     ax.plot(by, bx, "k-", linewidth=0.5, alpha=0.35, zorder=1)
     sc = ax.scatter(by, bx, c=frames, cmap="viridis", s=14, alpha=0.88, zorder=2, edgecolors="none")
@@ -363,7 +407,6 @@ def _plot_base_trajectory_2d(pose: np.ndarray, segments: list[tuple[int, int, st
             alpha=0.9,
         )
 
-    # Square limits in (horizontal=by, vertical=bx) space
     ym, yM = float(np.min(by)), float(np.max(by))
     xm, xM = float(np.min(bx)), float(np.max(bx))
     ch = 0.5 * (ym + yM)
@@ -385,60 +428,46 @@ def _plot_base_trajectory_2d(pose: np.ndarray, segments: list[tuple[int, int, st
     fig.tight_layout()
 
 
-def _plot_data_dashboard(
-    obs: np.ndarray,
-    action: np.ndarray,
-    condition: np.ndarray | None,
-) -> None:
-    """Time-series and heatmap views of obs / action / optional condition."""
-    action_dim = action.shape[1]
-    parts = _split_obs(obs, action_dim)
-    pose = parts["pose"]
-    pose_vel = parts["pose_vel"]
-    prev_m = parts["prev_motor"]
-    prev_mv = parts["prev_motor_vel"]
-    t = np.arange(obs.shape[0])
-    pose_labels = ["x", "y", "z", "roll", "pitch", "yaw"]
-
-    # --- Figure 1: line plots (pose, optional vels, prev motor, action) ---
-    n_rows = 3 + (1 if pose_vel is not None else 0) + (1 if prev_mv is not None else 0) + (1 if condition is not None else 0)
-    fig1, axes1 = plt.subplots(n_rows, 1, sharex=True, figsize=(12, 2.2 * n_rows + 0.5))
+def _plot_split_dashboard(parts: dict[str, np.ndarray], condition: np.ndarray | None) -> None:
+    n = parts["position"].shape[0]
+    t = np.arange(n)
+    rows_spec: list[tuple[str, np.ndarray, list[str] | None]] = [
+        ("position (xyz)", parts["position"], ["x", "y", "z"]),
+        ("orientation (rpy?)", parts["orientation"], ["a", "b", "c"]),
+        ("direction", parts["direction"], ["u", "v"]),
+        ("progress", parts["progress"], ["p"]),
+        ("target_contact", parts["target_contact"], [f"L{i}" for i in range(parts["target_contact"].shape[1])]),
+        ("target_position", parts["target_position"], ["x", "y", "z"]),
+        ("target_orientaiton", parts["target_orientaiton"], ["a", "b", "c"]),
+        ("target_linear_velocity", parts["target_linear_velocity"], ["vx", "vy", "vz"]),
+        ("target_angular_velocity", parts["target_angular_velocity"], ["wx", "wy", "wz"]),
+        ("target_joint_position", parts["target_joint_position"], None),
+        ("target_joint_velocity", parts["target_joint_velocity"], None),
+    ]
+    n_rows = len(rows_spec) + (1 if condition is not None else 0)
+    fig1, axes1 = plt.subplots(n_rows, 1, sharex=True, figsize=(12, 1.9 * n_rows + 0.5))
     if n_rows == 1:
         axes1 = [axes1]
     row = 0
-
-    for i in range(6):
-        axes1[row].plot(t, pose[:, i], label=pose_labels[i], linewidth=0.8)
-    axes1[row].set_ylabel("pose")
-    axes1[row].legend(loc="upper right", ncol=3, fontsize=7)
-    axes1[row].set_title("Dataset time series")
-    axes1[row].grid(True, alpha=0.3)
-    row += 1
-
-    if pose_vel is not None:
-        for i in range(6):
-            axes1[row].plot(t, pose_vel[:, i], label=f"d{pose_labels[i]}", linewidth=0.8)
-        axes1[row].set_ylabel("pose Δ / step")
-        axes1[row].legend(loc="upper right", ncol=3, fontsize=7)
-        axes1[row].grid(True, alpha=0.3)
-        row += 1
-
-    for j in range(action_dim):
-        axes1[row].plot(t, prev_m[:, j], linewidth=0.5, alpha=0.7)
-    axes1[row].set_ylabel("prev motor (obs)")
-    axes1[row].grid(True, alpha=0.3)
-    row += 1
-
-    if prev_mv is not None:
-        for j in range(action_dim):
-            axes1[row].plot(t, prev_mv[:, j], linewidth=0.5, alpha=0.7)
-        axes1[row].set_ylabel("prev motor vel")
-        axes1[row].grid(True, alpha=0.3)
+    for ylabel, mat, labels in rows_spec:
+        ax = axes1[row]
+        nc = mat.shape[1]
+        if labels is not None and len(labels) >= nc:
+            for j in range(nc):
+                ax.plot(t, mat[:, j], label=labels[j], linewidth=0.65)
+            ax.legend(loc="upper right", ncol=min(4, nc), fontsize=7)
+        else:
+            for j in range(nc):
+                ax.plot(t, mat[:, j], linewidth=0.45, alpha=0.75)
+        ax.set_ylabel(ylabel[:24])
+        ax.grid(True, alpha=0.3)
+        if row == 0:
+            ax.set_title("Split dataset (data_collector fields)")
         row += 1
 
     if condition is not None:
         cd = condition.shape[1]
-        c_labels = ["joy x (goal₀)", "joy y (goal₁)", "joy z (progress)"][:cd]
+        c_labels = ["joy x", "joy y", "joy z (progress)"][:cd]
         for i in range(cd):
             axes1[row].plot(t, condition[:, i], label=c_labels[i] if i < len(c_labels) else f"c{i}", linewidth=0.9)
         axes1[row].set_ylabel("condition")
@@ -446,56 +475,48 @@ def _plot_data_dashboard(
         axes1[row].grid(True, alpha=0.3)
         row += 1
 
-    for j in range(action_dim):
-        axes1[row].plot(t, action[:, j], linewidth=0.5, alpha=0.75)
-    axes1[row].set_ylabel("action (cmd)")
-    axes1[row].set_xlabel("sample index")
-    axes1[row].grid(True, alpha=0.3)
-
+    axes1[row - 1].set_xlabel("sample index")
     fig1.tight_layout()
 
-    # --- Figure 2: heatmaps ---
     fig2, axes2 = plt.subplots(1, 2, figsize=(14, 5))
-    vmax_obs = np.percentile(np.abs(obs), 99)
-    vmax_obs = float(max(vmax_obs, 1e-6))
+    obs = _hstack_from_split(parts)
+    vmax = float(max(np.percentile(np.abs(obs), 99), 1e-6))
     im0 = axes2[0].imshow(
         obs.T,
         aspect="auto",
         origin="lower",
         interpolation="nearest",
         cmap="coolwarm",
-        vmin=-vmax_obs,
-        vmax=vmax_obs,
-        extent=(0, obs.shape[0] - 1, 0, obs.shape[1]),
+        vmin=-vmax,
+        vmax=vmax,
+        extent=(0, n - 1, 0, obs.shape[1]),
     )
     axes2[0].set_xlabel("sample")
-    axes2[0].set_ylabel("obs feature index")
-    axes2[0].set_title("obs heatmap")
+    axes2[0].set_ylabel("concat feature index")
+    axes2[0].set_title("obs (hstacked split fields)")
     fig2.colorbar(im0, ax=axes2[0], fraction=0.046, pad=0.04)
 
-    vmax_a = np.percentile(np.abs(action), 99)
-    vmax_a = float(max(vmax_a, 1e-6))
+    jm = parts["target_joint_position"]
+    vmax_j = float(max(np.percentile(np.abs(jm), 99), 1e-6))
     im1 = axes2[1].imshow(
-        action.T,
+        jm.T,
         aspect="auto",
         origin="lower",
         interpolation="nearest",
         cmap="coolwarm",
-        vmin=-vmax_a,
-        vmax=vmax_a,
-        extent=(0, action.shape[0] - 1, 0, action.shape[1]),
+        vmin=-vmax_j,
+        vmax=vmax_j,
+        extent=(0, n - 1, 0, jm.shape[1]),
     )
     axes2[1].set_xlabel("sample")
-    axes2[1].set_ylabel("action dim")
-    axes2[1].set_title("action heatmap")
+    axes2[1].set_ylabel("joint index")
+    axes2[1].set_title("target_joint_position")
     fig2.colorbar(im1, ax=axes2[1], fraction=0.046, pad=0.04)
-
     fig2.tight_layout()
 
     if condition is not None and condition.shape[1] > 0:
         fig3, ax3 = plt.subplots(figsize=(12, 2.5))
-        vmax_c = np.percentile(np.abs(condition), 99)
-        vmax_c = float(max(vmax_c, 1e-6))
+        vmax_c = float(max(np.percentile(np.abs(condition), 99), 1e-6))
         imc = ax3.imshow(
             condition.T,
             aspect="auto",
@@ -508,9 +529,13 @@ def _plot_data_dashboard(
         )
         ax3.set_xlabel("sample")
         ax3.set_ylabel("condition dim")
-        ax3.set_title("condition heatmap (e.g. joy_cmd)")
+        ax3.set_title("condition heatmap")
         fig3.colorbar(imc, ax=ax3, fraction=0.035, pad=0.04)
         fig3.tight_layout()
+
+
+def _plot_data_dashboard(ds: LoadedDataset) -> None:
+    _plot_split_dashboard(ds.split_parts, ds.condition)
 
 
 def _transform_points(T_world_body: np.ndarray, points_body: np.ndarray) -> np.ndarray:
@@ -528,12 +553,13 @@ def _leg_chain_world(solver: SilverLainSolver, pose: np.ndarray, q: np.ndarray, 
         T = T @ solver._get_transformation_matrix(param)
         points.append(T[:3, -1].copy())
 
-    # Use meaningful chain nodes: body center -> coxa root -> femur joint -> tibia joint -> foot.
     return np.vstack([points[0], points[2], points[4], points[5], points[6]])
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Visualize SilverLain dataset (obs/action .npy).")
+    parser = argparse.ArgumentParser(
+        description="Visualize SilverLain data_collector split .npy bundles (per-run folder or flat names)."
+    )
     parser.add_argument(
         "--data-dir",
         type=Path,
@@ -544,31 +570,29 @@ def main() -> None:
         "--tag",
         type=str,
         default=None,
-        help="Load only {tag}_obs.npy / {tag}_action.npy (disables multi-run merge)",
+        help="Load only this run prefix, e.g. data/1/ → --tag 1 (or flat 1_position.npy, …)",
     )
     parser.add_argument(
         "--latest-only",
         action="store_true",
-        help="When several runs exist and --tag is not set, load only the newest *_obs.npy (old behavior)",
+        help="If multiple runs exist, load only the newest (by mtime)",
     )
     parser.add_argument(
         "--robot-only",
         action="store_true",
-        help="Only open the 3D robot animation (skip base XY trajectory, obs/action/condition plots)",
+        help="Only 3D animation (skip trajectory + dashboard)",
     )
     args = parser.parse_args()
-    obs, action, condition, segments = _load_dataset(
+    ds = _load_dataset(
         data_dir=args.data_dir,
         tag=args.tag,
         latest_only=args.latest_only,
     )
-    action_dim = action.shape[1]
-    pose, prev_motor_cmd = _obs_position_slices(obs, action_dim)
+    pose, prev_motor_cmd = _pose_and_joints_from_dataset(ds)
 
     solver = SilverLainSolver(LINK_LIST)
-    sample_count = obs.shape[0]
+    sample_count = pose.shape[0]
 
-    # Precompute limits for stable animation.
     all_feet = np.zeros((sample_count, 6, 3), dtype=np.float64)
     all_hips = np.zeros((sample_count, 6, 3), dtype=np.float64)
     for i in range(sample_count):
@@ -594,14 +618,13 @@ def main() -> None:
     mins = all_points.min(axis=0)
     maxs = all_points.max(axis=0)
     center = (mins + maxs) * 0.5
-    # Same numeric range on X, Y, Z (cube limits) + isometric box aspect.
     half_ranges = np.maximum(center - mins, maxs - center)
     half = float(max(half_ranges.max() * 1.08, 0.5))
 
     fig = plt.figure(figsize=(10, 8))
     ax = fig.add_subplot(111, projection="3d")
-    if len(segments) > 1:
-        ax.set_title(f"SilverLain — {len(segments)} runs, {sample_count} frames (concatenated)")
+    if len(ds.segments) > 1:
+        ax.set_title(f"SilverLain — {len(ds.segments)} runs, {sample_count} frames (concatenated)")
     else:
         ax.set_title("SilverLain Hexapod Animation")
     ax.set_xlabel("X")
@@ -648,15 +671,15 @@ def main() -> None:
             foot_points[leg_idx] = chain[-1]
 
         feet_scatter._offsets3d = (foot_points[:, 0], foot_points[:, 1], foot_points[:, 2])
-        seg_label, local_i, seg_len = _segment_info(segments, frame_idx)
+        seg_label, local_i, seg_len = _segment_info(ds.segments, frame_idx)
         text.set_text(
             f"run {seg_label!r}  {local_i + 1}/{seg_len}  |  total {frame_idx + 1}/{sample_count}"
         )
         return [body_line, *leg_lines, feet_scatter, text]
 
     if not args.robot_only:
-        _plot_base_trajectory_2d(pose, segments)
-        _plot_data_dashboard(obs, action, condition)
+        _plot_base_trajectory_2d(pose, ds.segments)
+        _plot_data_dashboard(ds)
         plt.show(block=False)
 
     anim = FuncAnimation(fig, _update, frames=sample_count, interval=40, blit=False, repeat=True)

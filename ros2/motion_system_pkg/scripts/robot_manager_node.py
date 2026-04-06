@@ -142,6 +142,7 @@ class RobotManagerNode(Node):
         )
         self._obs = []
         self._target = []
+        self._count = 0
  
         self._timer = self.create_timer(
             self._robot_manager.dt,
@@ -160,6 +161,27 @@ class RobotManagerNode(Node):
             self._selected_robot_id = self._number_of_robots - 1
         self.get_logger().info(f"Selected robot ID: {self._selected_robot_id}")
 
+    def _round_direction(self, direction: np.ndarray) -> np.ndarray:
+        angle = np.arctan2(direction[1], direction[0])
+        if np.abs(angle) <= np.pi / 8:
+            return np.array([1, 0])
+        elif angle > np.pi / 8 and angle <= 3 * np.pi / 8:
+            return np.array([np.sqrt(2) / 2, np.sqrt(2) / 2])
+        elif angle > 3 * np.pi / 8 and angle <= 5 * np.pi / 8:
+            return np.array([0, 1])
+        elif angle > 5 * np.pi / 8 and angle <= 7 * np.pi / 8:
+            return np.array([-np.sqrt(2) / 2, np.sqrt(2) / 2])
+        elif angle >= 7 * np.pi / 8 or angle <= -7 * np.pi / 8:
+            return np.array([-1, 0])
+        elif angle > -7 * np.pi / 8 and angle <= -5 * np.pi / 8:
+            return np.array([-np.sqrt(2) / 2, -np.sqrt(2) / 2])
+        elif angle > -5 * np.pi / 8 and angle <= -3 * np.pi / 8:
+            return np.array([0, -1])
+        elif angle > -3 * np.pi / 8 and angle <= -np.pi / 8:
+            return np.array([np.sqrt(2) / 2, -np.sqrt(2) / 2])
+        else:
+            return np.array([1, 0])
+
     def _normalize_joy_command(self, joy_axes: Dict[JoyAxes, float]) -> np.ndarray:
         vx = joy_axes[JoyAxes.LEFT_VERTICAL]
         vy = joy_axes[JoyAxes.LEFT_HORIZONTAL]
@@ -175,12 +197,29 @@ class RobotManagerNode(Node):
         
         if linear_speed > 0.0:
             direction = linear_velocity / linear_speed
-
+            direction = self._round_direction(direction)
+            
         return ActionFrame(
             action=Action.WALK,
             goal=np.array([direction[0], direction[1], wz]),
             duration=duration,
         )
+
+    def _for_data_collection_joy_axes(self) -> Dict[JoyAxes, float]:
+        direction_list = [np.array([1.0, 0.0]),
+                          np.array([np.sqrt(2) / 2, np.sqrt(2) / 2]),
+                          np.array([0.0, 1.0]),
+                          np.array([-np.sqrt(2) / 2, np.sqrt(2) / 2]),
+                          np.array([-1.0, 0.0]),
+                          np.array([-np.sqrt(2) / 2, -np.sqrt(2) / 2]),
+                          np.array([0.0, -1.0]),
+                          np.array([np.sqrt(2) / 2, -np.sqrt(2) / 2])]
+        
+        count = self._count % 8
+        return {JoyAxes.LEFT_VERTICAL: direction_list[count][0],
+                JoyAxes.LEFT_HORIZONTAL: direction_list[count][1],
+                JoyAxes.RIGHT_HORIZONTAL: 0.0}
+
 
     def _publish_joint_command(self, joint_command: JointStatus) -> None:
         msg = MotorStatus()
@@ -256,16 +295,24 @@ class RobotManagerNode(Node):
 
         # Normalize joy command if action is WALK
         if self._curr_action[self._selected_robot_id].action == Action.WALK:
-            self._curr_action[self._selected_robot_id] = self._normalize_joy_command(self._joy_axes)
-            
+            if self._robot_manager._robots[self._selected_robot_id]._scheduler.current_state.progress == 1.0:
+                self._count = np.random.randint(0, 8)
+
+            #self._curr_action[self._selected_robot_id] = self._normalize_joy_command(self._joy_axes)
+            self._curr_action[self._selected_robot_id] = self._normalize_joy_command(self._for_data_collection_joy_axes())
+
             if self._curr_action[self._selected_robot_id].goal[0] != 0.0 or self._curr_action[self._selected_robot_id].goal[1] != 0.0:
                 self._obs.append(self._curr_action[self._selected_robot_id].goal[0])
                 self._obs.append(self._curr_action[self._selected_robot_id].goal[1])
                 self._obs.append(self._robot_manager.get_state_frame(self._selected_robot_id).progress)
                 
                 if self._robot_manager._robots[self._selected_robot_id]._events is not None:
-                    for i in range(6):
-                        self._target.append(self._robot_manager._robots[self._selected_robot_id]._events[i].event.value-1)
+                    if self._robot_manager._robots[self._selected_robot_id]._scheduler.current_state.progress == 0.5 or self._robot_manager._robots[self._selected_robot_id]._scheduler.current_state.progress == 1.0:
+                        for i in range(6):
+                            self._target.append(0)
+                    else:
+                        for i in range(6):
+                            self._target.append(self._robot_manager._robots[self._selected_robot_id]._events[i].event.value-1)
 
         # Set action and get joint commands and publish it
         joint_command = self._robot_manager.set_action_frame(self._curr_action)

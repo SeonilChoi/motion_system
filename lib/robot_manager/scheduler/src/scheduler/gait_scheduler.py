@@ -86,10 +86,12 @@ class GaitScheduler(Scheduler):
     def _progress_leg(self, t: float, leg: int) -> float:
         if self._T == 0.0:
             return 0.0
-        if self._T == t:
+        
+        res = round((t / self._T + self._offset[leg]) % 1.0, 3)
+        if res == 0.0:
             return 1.0
-        return round((t / self._T + self._offset[leg]) % 1.0, 3)
-
+        else:
+            return res
 
     def tick(self, frame: ActionFrame) -> bool:
         is_event = False
@@ -116,10 +118,10 @@ class GaitScheduler(Scheduler):
                 self._prev_progress = progress
 
                 for leg in self._prev_phase.keys():
-                    curr_progress = self._progress_leg(self._t, leg)
+                    curr_progress = self._progress_leg(t, leg)
 
                     prev_phase = self._prev_phase[leg]
-                    curr_phase = Phase.STANCE if curr_progress < 0.5 else Phase.SWING
+                    curr_phase = Phase.STANCE if curr_progress <= 0.5 else Phase.SWING
 
                     if prev_phase != curr_phase:
                         if prev_phase == Phase.STANCE and curr_phase == Phase.SWING:
@@ -132,7 +134,7 @@ class GaitScheduler(Scheduler):
                 if len(self._events) > 0:
                     is_event = True
 
-                if progress >= 0.5:
+                if progress > 0.5:
                     self._first_step = False
 
                 if progress >= 1.0:

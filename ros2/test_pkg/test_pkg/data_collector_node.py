@@ -11,11 +11,11 @@ Saved obs row layout (float64 1-D), from ``std_msgs/Float64MultiArray`` on ``obs
 | [8]     | progress (one element)   |
 | [9:15]  | target_contact           |
 | [15:18] | target_position (incoming); saved ``target_position.npy`` adds ``POSE_Z_OFFSET`` to z |
-| [18:21] | → ``target_orientaiton.npy`` (filename as published) |
+| [18:21] | → ``target_orientation.npy`` (filename as published) |
 | [21:24] | target_linear_velocity   |
 | [24:27] | target_angular_velocity    |
 | [27:45] | target_joint_position (incoming); saved ``target_joint_position.npy`` applies offset, reorder, then direction |
-| [45:]   | target_joint_velocity (incoming); saved ``target_joint_velocity.npy`` applies reorder, then direction (no offset) |
+| [45:]   | target_joint_velocity (incoming); before save: optional Hampel + MA smooth; then reorder + sign for ``.npy`` |
 
 Joint count 18 for [27:45] and for velocities from index 45 onward.
 
@@ -130,6 +130,70 @@ def _joint_velocities_for_storage(qdot: np.ndarray) -> np.ndarray:
     return x
 
 
+def _hampel_filter_columns(x: np.ndarray, half_window: int, mad_scale: float) -> np.ndarray:
+    """Per-column Hampel filter along time: replace samples far from local median (spike suppression)."""
+    n, d = x.shape
+    w = 2 * half_window + 1
+    if n < w or half_window < 1:
+        return np.array(x, dtype=np.float64, copy=True)
+    out = np.empty((n, d), dtype=np.float64)
+    swv = np.lib.stride_tricks.sliding_window_view
+    for j in range(d):
+        col = np.asarray(x[:, j], dtype=np.float64)
+        xp = np.pad(col, (half_window, half_window), mode="edge")
+        sw = swv(xp, w)
+        med = np.median(sw, axis=1)
+        mad = np.median(np.abs(sw - med[:, np.newaxis]), axis=1)
+        mad = np.maximum(mad, 1e-12)
+        ctr = sw[:, half_window]
+        spike = np.abs(ctr - med) > mad_scale * 1.4826 * mad
+        fixed = np.array(ctr, copy=True)
+        fixed[spike] = med[spike]
+        out[:, j] = fixed
+    return out
+
+
+def _moving_average_columns(x: np.ndarray, window: int) -> np.ndarray:
+    """Per-column centered moving average (odd window); edge-padded with edge values."""
+    n, d = x.shape
+    if window < 2 or n == 0:
+        return np.array(x, dtype=np.float64, copy=True)
+    if window % 2 == 0:
+        window += 1
+    pad = window // 2
+    out = np.empty((n, d), dtype=np.float64)
+    for j in range(d):
+        col = np.asarray(x[:, j], dtype=np.float64)
+        c = np.pad(col, (pad, pad), mode="edge")
+        cum = np.cumsum(np.insert(c, 0, 0.0))
+        out[:, j] = (cum[window:] - cum[:-window]) / window
+    return out
+
+
+def smooth_joint_velocity_slice(
+    qdot: np.ndarray,
+    *,
+    hampel_half_window: int = 2,
+    hampel_mad_scale: float = 3.5,
+    ma_window: int = 3,
+) -> np.ndarray:
+    """
+    Temporal smoothing on incoming joint velocities (obs frame, same layout as ``obs[:, 45:]``).
+
+    Order: Hampel (outlier replacement) → short moving average. Applied once per save batch
+    (each npy chunk independently when ``chunk_size > 0``).
+    """
+    x = np.asarray(qdot, dtype=np.float64)
+    if x.ndim != 2 or x.shape[0] < 2:
+        return np.array(x, copy=True)
+    y = x
+    if hampel_half_window >= 1:
+        y = _hampel_filter_columns(y, hampel_half_window, hampel_mad_scale)
+    if ma_window >= 2:
+        y = _moving_average_columns(y, ma_window)
+    return y
+
+
 def _save_obs_split(obs: np.ndarray, path_for_stem: Callable[[str], Path]) -> None:
     """Save (N, D) rows into separate .npy files; ``path_for_stem(stem) -> Path``."""
     np.save(path_for_stem("position"), _translation_for_storage(obs[:, 0:3]))
@@ -169,6 +233,10 @@ class DataCollectorNode(Node):
         self.declare_parameter("joy_cmd_topic", "joy_cmd")
         self.declare_parameter("event_topic", "event")
         self.declare_parameter("contact_dim", 6)
+        self.declare_parameter("smooth_joint_velocity", True)
+        self.declare_parameter("joint_velocity_hampel_half_window", 2)
+        self.declare_parameter("joint_velocity_hampel_mad_scale", 3.5)
+        self.declare_parameter("joint_velocity_ma_window", 3)
 
         self._max_samples = int(self.get_parameter("max_samples").value)
         self._chunk_size = max(0, int(self.get_parameter("chunk_size").value))
@@ -181,6 +249,11 @@ class DataCollectorNode(Node):
         _ = str(self.get_parameter("joy_cmd_topic").value)
         _ = str(self.get_parameter("event_topic").value)
         _ = int(self.get_parameter("contact_dim").value)
+
+        self._smooth_joint_velocity = bool(self.get_parameter("smooth_joint_velocity").value)
+        self._jv_hampel_hw = max(0, int(self.get_parameter("joint_velocity_hampel_half_window").value))
+        self._jv_hampel_mad = float(self.get_parameter("joint_velocity_hampel_mad_scale").value)
+        self._jv_ma_window = int(self.get_parameter("joint_velocity_ma_window").value)
 
         self._obs_buffer: list[np.ndarray] = []
         self._last_obs: Optional[np.ndarray] = None
@@ -198,7 +271,7 @@ class DataCollectorNode(Node):
         self.get_logger().info(
             "Obs-only mode: subscribe 'obs' (std_msgs/Float64MultiArray); "
             "on change, save split .npy: position, orientation, direction, progress, "
-            "target_contact, target_position, target_orientaiton, target_linear_velocity, "
+            "target_contact, target_position, target_orientation, target_linear_velocity, "
             "target_angular_velocity, target_joint_position, target_joint_velocity."
         )
         self.get_logger().info(
@@ -220,6 +293,26 @@ class DataCollectorNode(Node):
             self.get_logger().info(
                 f"Each chunk → subdirectory {self._output_dir.name}/<idx>/ (e.g. …/1/position.npy)"
             )
+        if self._smooth_joint_velocity:
+            self.get_logger().info(
+                "target_joint_velocity pre-save smoothing: Hampel "
+                f"(half_window={self._jv_hampel_hw}, MAD scale={self._jv_hampel_mad}), "
+                f"then moving average (window={self._jv_ma_window}; set <2 to skip MA)."
+            )
+
+    def _obs_for_save(self, obs: np.ndarray) -> np.ndarray:
+        """Copy ``obs`` and optionally smooth joint velocity slice before split save."""
+        if not self._smooth_joint_velocity or obs.shape[1] <= _OBS_JOINT_VEL_START:
+            return obs
+        out = np.array(obs, dtype=np.float64, copy=True)
+        sl = slice(_OBS_JOINT_VEL_START, None)
+        out[:, sl] = smooth_joint_velocity_slice(
+            out[:, sl],
+            hampel_half_window=self._jv_hampel_hw,
+            hampel_mad_scale=self._jv_hampel_mad,
+            ma_window=self._jv_ma_window,
+        )
+        return out
 
     def _run_subdir(self, file_idx: int) -> Path:
         """``output_dir / {tag}_{idx} /`` or ``output_dir / {idx} /``."""
@@ -285,6 +378,7 @@ class DataCollectorNode(Node):
     def _flush_chunk_to_disk(self, n: int) -> None:
         assert n > 0 and n <= len(self._obs_buffer)
         obs = np.stack(self._obs_buffer[:n], axis=0)
+        obs = self._obs_for_save(obs)
         idx = self._file_index
         run_dir = self._run_subdir(idx)
         run_dir.mkdir(parents=True, exist_ok=True)
@@ -301,6 +395,7 @@ class DataCollectorNode(Node):
 
     def _save_single_file_and_shutdown(self) -> None:
         obs = np.stack(self._obs_buffer, axis=0)
+        obs = self._obs_for_save(obs)
         idx = self._file_index
         run_dir = self._run_subdir(idx)
         run_dir.mkdir(parents=True, exist_ok=True)

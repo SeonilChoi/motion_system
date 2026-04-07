@@ -17,12 +17,11 @@ class Scheduler(ABC):
     def current_state(self) -> StateFrame:
         return self._current_state
 
-    def reset(self) -> None:
-        self._t = 0.0
-
-        self._current_state = StateFrame(state=State.STOPPED, progress=0.0)
-
 
     @abstractmethod
     def tick(self, frame: ActionFrame) -> bool:
+        ...
+
+    @abstractmethod
+    def reset(self) -> None:
         ...

@@ -140,3 +140,7 @@ class RobotManager:
                 torque=joint_status.torque[sel],
             )
             robot.update_joint_status(sub)
+
+    def reset(self) -> None:
+        for robot in self._robots:
+            robot.reset()

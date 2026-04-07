@@ -143,6 +143,8 @@ class RobotManagerNode(Node):
         self._obs = []
         self._target = []
         self._count = 0
+        self._count_count = 0
+        self._index = 0
  
         self._timer = self.create_timer(
             self._robot_manager.dt,
@@ -219,6 +221,14 @@ class RobotManagerNode(Node):
         return {JoyAxes.LEFT_VERTICAL: direction_list[count][0],
                 JoyAxes.LEFT_HORIZONTAL: direction_list[count][1],
                 JoyAxes.RIGHT_HORIZONTAL: 0.0}
+    
+    def _reset(self) -> None:
+        self._obs = []
+        self._target = []
+        self._count = np.random.randint(0, 8)
+        self._count_count = 0
+        self._index = 0
+        self._robot_manager.reset()
 
 
     def _publish_joint_command(self, joint_command: JointStatus) -> None:
@@ -296,7 +306,12 @@ class RobotManagerNode(Node):
         # Normalize joy command if action is WALK
         if self._curr_action[self._selected_robot_id].action == Action.WALK:
             if self._robot_manager._robots[self._selected_robot_id]._scheduler.current_state.progress == 1.0:
-                self._count = np.random.randint(0, 8)
+                if self._count_count >= 1:
+                    self._count = (np.random.randint(0, 5) - 2 + self._count + 8) % 8
+                    self._count_count = 0
+                else:
+                    self._count_count += 1
+
 
             #self._curr_action[self._selected_robot_id] = self._normalize_joy_command(self._joy_axes)
             self._curr_action[self._selected_robot_id] = self._normalize_joy_command(self._for_data_collection_joy_axes())
@@ -341,6 +356,10 @@ class RobotManagerNode(Node):
             for i in range(54):
                 msg.data.append(self._target[i])
             self._obs_pub.publish(msg)
+
+            self._index += 1
+            if self._index == 5000:
+                self._reset()
 
         self._obs = []
         self._target = []

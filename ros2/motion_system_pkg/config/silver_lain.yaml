@@ -8,7 +8,7 @@ robots:
     robot: silver_lain
     duration: 5.0
     stride_length: 0.2
-    clearance: 0.2
+    clearance: 0.15
     home_joint_positions: [0.0, -0.6981317007977318,  2.443460952792061, 
                            0.0, -0.6981317007977318,  2.443460952792061,
                            0.0, -0.6981317007977318,  2.443460952792061,

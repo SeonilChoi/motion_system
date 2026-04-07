@@ -147,3 +147,25 @@ class SilverLain(Robot):
         self._curr_joint_status.position = joint_status.position
         self._curr_joint_status.velocity = joint_status.velocity
         self._curr_joint_status.torque = joint_status.torque
+
+    def reset(self) -> None:
+        # Gait Scheduler Variables
+        self._events = None
+        self._scheduler.reset()
+        
+        # Robot Variables
+        self._curr_joint_status = JointStatus(
+            motor_id=np.asarray(self._controller_indexes, dtype=np.int8),
+            position=self._home_joint_positions.copy(),
+            velocity=np.zeros(self._number_of_motors, dtype=np.float64),
+            torque=np.zeros(self._number_of_motors, dtype=np.float64),
+        )
+
+        home_point = self._kinematic_solver.forward_with_pose(self._home_pose.copy(), self._home_joint_positions.copy())
+        self._curr_robot_state = RobotStatus(
+            robot_id=self._robot_id,
+            pose=self._home_pose.copy(),
+            point=home_point.copy(),
+            twist=np.zeros(6, dtype=np.float64),
+            wrench=np.zeros(6, dtype=np.float64),
+        )

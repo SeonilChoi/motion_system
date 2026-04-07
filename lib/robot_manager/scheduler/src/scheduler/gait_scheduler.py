@@ -148,3 +148,12 @@ class GaitScheduler(Scheduler):
 
     def set_first_step(self, first_step: bool) -> None:
         self._first_step = first_step
+
+    def reset(self) -> None:
+        self._t = 0.0
+        
+        self._prev_progress = 0.0
+        
+        self._events = []
+        
+        self._first_step = True

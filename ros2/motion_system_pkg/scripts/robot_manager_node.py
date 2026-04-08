@@ -134,17 +134,6 @@ class RobotManagerNode(Node):
             'motor_command',
             _motor_status_qos(),
         )
-
-        self._obs_pub = self.create_publisher(
-            Float64MultiArray,
-            'obs',
-            5,
-        )
-        self._obs = []
-        self._target = []
-        self._count = 0
-        self._count_count = 0
-        self._index = 0
  
         self._timer = self.create_timer(
             self._robot_manager.dt,
@@ -207,29 +196,6 @@ class RobotManagerNode(Node):
             duration=duration,
         )
 
-    def _for_data_collection_joy_axes(self) -> Dict[JoyAxes, float]:
-        direction_list = [np.array([1.0, 0.0]),
-                          np.array([np.sqrt(2) / 2, np.sqrt(2) / 2]),
-                          np.array([0.0, 1.0]),
-                          np.array([-np.sqrt(2) / 2, np.sqrt(2) / 2]),
-                          np.array([-1.0, 0.0]),
-                          np.array([-np.sqrt(2) / 2, -np.sqrt(2) / 2]),
-                          np.array([0.0, -1.0]),
-                          np.array([np.sqrt(2) / 2, -np.sqrt(2) / 2])]
-        
-        count = self._count % 8
-        return {JoyAxes.LEFT_VERTICAL: direction_list[count][0],
-                JoyAxes.LEFT_HORIZONTAL: direction_list[count][1],
-                JoyAxes.RIGHT_HORIZONTAL: 0.0}
-    
-    def _reset(self) -> None:
-        self._obs = []
-        self._target = []
-        self._count = np.random.randint(0, 8)
-        self._count_count = 0
-        self._index = 0
-        self._robot_manager.reset()
-
 
     def _publish_joint_command(self, joint_command: JointStatus) -> None:
         msg = MotorStatus()
@@ -243,16 +209,6 @@ class RobotManagerNode(Node):
         msg.velocity = joint_command.velocity
         msg.torque = joint_command.torque
         self._motor_command_pub.publish(msg)
-
-    def _publish_events(self, events: List[Event]) -> None:
-        """Int8MultiArray length 6: index = leg id, value = EventKind (value-1), -1 = no event this tick."""
-        msg = Int8MultiArray()
-        row = [-1] * 6
-        for e in events:
-            if 0 <= e.leg < len(row):
-                row[e.leg] = int(e.event.value - 1)
-        msg.data = row
-        self._event_pub.publish(msg)
 
 
     def motor_state_callback(self, msg: MotorStatus) -> None:
@@ -278,8 +234,6 @@ class RobotManagerNode(Node):
     def timer_callback(self) -> None:
         # Read robot state and publish it
         self._robot_status = self._robot_manager.get_robot_status(self._selected_robot_id)
-        for i in range(6):
-            self._obs.append(self._robot_status.pose[i])
         
         prev_pose = self._robot_status.pose.copy()
         prev_joint_position = self._robot_manager._robots[self._selected_robot_id]._curr_joint_status.position.copy()
@@ -316,53 +270,13 @@ class RobotManagerNode(Node):
             #self._curr_action[self._selected_robot_id] = self._normalize_joy_command(self._joy_axes)
             self._curr_action[self._selected_robot_id] = self._normalize_joy_command(self._for_data_collection_joy_axes())
 
-            if self._curr_action[self._selected_robot_id].goal[0] != 0.0 or self._curr_action[self._selected_robot_id].goal[1] != 0.0:
-                self._obs.append(self._curr_action[self._selected_robot_id].goal[0])
-                self._obs.append(self._curr_action[self._selected_robot_id].goal[1])
-                self._obs.append(self._robot_manager.get_state_frame(self._selected_robot_id).progress)
-                
-                if self._robot_manager._robots[self._selected_robot_id]._events is not None:
-                    if self._robot_manager._robots[self._selected_robot_id]._scheduler.current_state.progress == 0.5 or self._robot_manager._robots[self._selected_robot_id]._scheduler.current_state.progress == 1.0:
-                        for i in range(6):
-                            self._target.append(0)
-                    else:
-                        for i in range(6):
-                            self._target.append(self._robot_manager._robots[self._selected_robot_id]._events[i].event.value-1)
-
         # Set action and get joint commands and publish it
         joint_command = self._robot_manager.set_action_frame(self._curr_action)
         self._publish_joint_command(joint_command)
 
-        curr_pose = self._robot_manager.get_robot_status(self._selected_robot_id)
-        curr_joint_position = joint_command.position.copy()
-
-        for i in range(6):
-            self._target.append(curr_pose.pose[i])
-        for i in range(6):
-            self._target.append((curr_pose.pose[i] - prev_pose[i]) / self._robot_manager.dt)
-        for i in range(18):
-            self._target.append(curr_joint_position[i])
-        for i in range(18):
-            self._target.append((curr_joint_position[i] - prev_joint_position[i]) / self._robot_manager.dt)
-
         # Update previous joy axes and buttons
         self._prev_joy_axes = copy.deepcopy(self._joy_axes)
         self._prev_joy_buttons = copy.deepcopy(self._joy_buttons)
-
-        if len(self._obs) == 9 and len(self._target) == 54:
-            msg = Float64MultiArray()
-            for i in range(9):
-                msg.data.append(self._obs[i])
-            for i in range(54):
-                msg.data.append(self._target[i])
-            self._obs_pub.publish(msg)
-
-            self._index += 1
-            if self._index == 5000:
-                self._reset()
-
-        self._obs = []
-        self._target = []
 
 
 def main() -> None:

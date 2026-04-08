@@ -130,11 +130,6 @@ class SilverLain(Robot):
             target_position = self._kinematic_solver.inverse_with_pose(target_pose.copy(), target_point.copy())
             commands[:, 0] = target_position.copy()
 
-            # For test
-            self._curr_robot_state.pose = target_pose.copy()
-            self._curr_robot_state.point = target_point.copy()
-            self._curr_joint_status.position = target_position.copy()
-
         if frame.action == Action.WALK and not np.all(frame.goal == 0.0):
             self._scheduler.step()
 

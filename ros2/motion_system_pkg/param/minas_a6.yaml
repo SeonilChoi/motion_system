@@ -11,8 +11,8 @@ items:
   - { id: 50, index: 0x6072, subindex: 0x00, value: 0, type: u16 } # Max torque
   - { id: 51, index: 0x607B, subindex: 0x01, value: 0, type: s32 } # Min position range limit
   - { id: 52, index: 0x607B, subindex: 0x02, value: 0, type: s32 } # Max position range limit
-  - { id: 59, index: 0x607D, subindex: 0x01, value: 0, type: s32 } # Min software position limit
-  - { id: 60, index: 0x607D, subindex: 0x02, value: 0, type: s32 } # Max software position limit
+  - { id: 51, index: 0x607D, subindex: 0x01, value: 0, type: s32 } # Min software position limit
+  - { id: 52, index: 0x607D, subindex: 0x02, value: 0, type: s32 } # Max software position limit
   - { id: 53, index: 0x6080, subindex: 0x00, value: 0, type: u32 } # Max motor speed
   - { id: 54, index: 0x6081, subindex: 0x00, value: 0, type: u32 } # Profile velocity
   - { id: 55, index: 0x6083, subindex: 0x00, value: 0, type: u32 } # Profile acceleration

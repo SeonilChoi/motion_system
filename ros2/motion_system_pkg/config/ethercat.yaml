@@ -27,10 +27,10 @@ drivers:
     lower: -3.14
     upper: 3.14
     speed: 2000
-    acceleration: 10.0
-    deceleration: 10.0
-    profile_velocity: 3.14
-    profile_acceleration: 6.28
-    profile_deceleration: 6.28
+    acceleration: 1.0
+    deceleration: 1.0
+    profile_velocity: 1.0
+    profile_acceleration: 1.0
+    profile_deceleration: 1.0
     type: minas
     param_file: ../param/minas_a6.yaml

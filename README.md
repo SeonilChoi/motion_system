@@ -1,64 +1,132 @@
-# motion_system workspace
+# motion_system
 
-## Repository layout
+ROS 2 workspace for robot motion: a **real-time motor stack** (EtherCAT with MINAS / ZeroErr drivers, and related plumbing) and a **Python robot / scheduler / kinematics** layer. The `motion_system_pkg` nodes connect joystick and high-level robot state to the low-level `MotorManager`.
 
-Top-level directories under this `src` tree (colcon packages live here):
-
-```
-src/
-├── README.md
-├── common/
-│   ├── common_robot_interface/     # ament_python: Action, ActionFrame, State, StateFrame (+ joint.py)
-│   └── common_motor_interface/     # ament_cmake: shared C++ motor_frame_t header
-├── lib/
-│   ├── robot_manager/              # ament_cmake wrapper + nested Python packages
-│   │   ├── core/robot_interface/   # abstract Robot + Scheduler
-│   │   ├── kinematics/ planner/ scheduler/ robots/  # Python behavior packages
-│   │   └── robot_manager/          # RobotManager, YAML + joystick mapping
-│   └── motor_manager/              # ament_cmake: EtherCAT + MINAS + MotorManager
-│       ├── core/motor_interface/   # MotorMaster / MotorController / MotorDriver
-│       ├── communications/ethercat/ # IgH EtherCAT master + controller
-│       ├── hardware/minas/         # MinasDriver
-│       └── motor_manager/          # MotorManager orchestrator
-└── ros2/
-    ├── motion_system_msgs/         # MotorFrame.msg, MotorFrameMultiArray.msg
-    └── motion_system_pkg/          # motor_manager_node (C++), robot_manager_node (Python)
-        ├── config/                 # robot + EtherCAT YAML defaults for launch
-        ├── param/                  # drive parameter YAML (e.g. MINAS)
-        ├── include/, src/           # C++ node
-        ├── scripts/                 # Python node entry scripts
-        └── launch/                  # joy, motor_manager_node, robot_manager_node
-```
-
-| Area | Role |
-|------|------|
-| `common/*` | Language-specific shared types only; no ROS nodes. |
-| `lib/robot_manager/*` | Python robot behavior: config, schedulers, robot models, `RobotManager`. |
-| `lib/motor_manager/*` | C++ real-time motor stack: YAML-loaded masters/controllers/drivers. |
-| `ros2/motion_system_msgs` | Message schema for `motor_command` / `motor_state` topics. |
-| `ros2/motion_system_pkg` | Bridges ROS topics to `MotorManager` and runs teleop-side logic. |
-
-Generated or local artifacts (`build/`, `install/`, `log/` under `lab_ws`, and `__pycache__`) are not shown; they are produced by the build, not source.
+Use this repository directory as the **colcon workspace root**; `colcon` discovers packages recursively via `package.xml` files under `common/`, `lib/`, and `ros2/`.
 
 ---
 
-## API reference index
+## Requirements
 
-Package-level API references (classes, functions, constants, message fields):
+- **ROS 2** (point `setup.bash` at your distro, e.g. Humble or Jazzy)
+- **Build**: `colcon`, CMake, C++17 toolchain
+- **Libraries**: `yaml-cpp` (motor YAML loading in `motor_manager`)
+- **Real EtherCAT**: IgH EtherCAT Master and matching kernel/driver setup (see `lib/motor_manager/communications/ethercat`)
 
-| Path | Reference |
-|------|-----------|
-| [common/common_robot_interface/README.md](common/common_robot_interface/README.md) | Python `Action`, `ActionFrame`, `JointState`, `State`, `StateFrame` |
-| [common/common_motor_interface/README.md](common/common_motor_interface/README.md) | C++ `motor_frame_t`, `MAX_INTERFACE_SIZE` |
-| [lib/robot_manager/README.md](lib/robot_manager/README.md) | Robot manager stack entry |
-| [lib/motor_manager/README.md](lib/motor_manager/README.md) | Motor runtime stack entry |
-| [ros2/motion_system_msgs/README.md](ros2/motion_system_msgs/README.md) | ROS message field reference |
-| [ros2/motion_system_pkg/README.md](ros2/motion_system_pkg/README.md) | ROS nodes, launch arguments, scripts |
+Python stacks need `numpy`, `rclpy`, and other dependencies declared in the relevant `package.xml` / `setup.py` files.
 
-Build (from `lab_ws`):
+---
+
+## Build
+
+From the workspace root (this repo):
 
 ```bash
 source /opt/ros/<distro>/setup.bash
+cd /path/to/motion_system
 colcon build --symlink-install
 source install/setup.bash
 ```
+
+Example partial build:
+
+```bash
+colcon build --packages-up-to motion_system_pkg --symlink-install
+```
+
+---
+
+## Running
+
+1. **Motor layer** — `motor_manager_node` loads `MotorManager` from YAML and exchanges `motion_system_msgs/msg/MotorStatus` on `motor_command` / `motor_state`.
+2. **Robot / joystick layer** — `robot_manager_node` subscribes to `joy` and `motor_state`, runs `RobotManager`, and publishes `motor_command`.
+
+Typical two-terminal flow:
+
+```bash
+# Terminal 1 — motor stack (default: ethercat_integrated.yaml)
+ros2 launch motion_system_pkg motor_manager_node.launch.py
+
+# Terminal 2 — joystick + robot manager (default: silver_lain.yaml)
+ros2 launch motion_system_pkg robot_manager_node.launch.py
+```
+
+Defaults: `motor_manager_node.launch.py` passes `config_file` from `share/motion_system_pkg/config/ethercat_integrated.yaml`. `robot_manager_node.launch.py` includes `joy.launch.py` and defaults `config_file` to `config/silver_lain.yaml`.
+
+---
+
+## ROS interface
+
+
+| Topic           | Message                              | `motor_manager_node` |
+| --------------- | ------------------------------------ | -------------------- |
+| `motor_command` | `motion_system_msgs/msg/MotorStatus` | subscribes           |
+| `motor_state`   | `motion_system_msgs/msg/MotorStatus` | publishes            |
+
+
+`MotorStatus` uses **parallel per-controller arrays** (see `msg/MotorStatus.msg` and [ros2/motion_system_msgs/README.md](ros2/motion_system_msgs/README.md)).
+
+The `utils_pkg` package provides a `sine_motor_command_publisher` console entry point for simple test publishing.
+
+---
+
+## Repository layout
+
+```
+motion_system/                 # colcon workspace root
+├── common/
+│   ├── common_robot_interface/   # ament_python: Action, ActionFrame, JointStatus, RobotStatus, …
+│   └── common_motor_interface/   # ament_cmake: shared C++ headers (e.g. motor_frame_t)
+├── lib/
+│   ├── robot_manager/            # ament_cmake wrapper + nested Python packages
+│   │   ├── core/robot_interface/
+│   │   ├── kinematics/ planner/ scheduler/ robots/
+│   │   └── robot_manager/        # RobotManager, robot YAML
+│   └── motor_manager/            # ament_cmake: EtherCAT, MINAS, ZeroErr, MotorManager
+│       ├── core/motor_interface/
+│       ├── communications/ethercat/
+│       ├── hardware/minas/ hardware/zeroerr/
+│       └── motor_manager/
+└── ros2/
+    ├── motion_system_msgs/       # MotorStatus.msg
+    ├── motion_system_pkg/        # motor_manager_node (C++), robot_manager_node (Python), launch/config/param
+    └── utils_pkg/                # ament_python utilities
+```
+
+Build outputs (`build/`, `install/`, `log/`) and `__pycache__` are not part of source control.
+
+---
+
+## Package roles
+
+
+| Area                      | Role                                                                 |
+| ------------------------- | -------------------------------------------------------------------- |
+| `common/*`                | Shared types and headers only; no ROS nodes                          |
+| `lib/robot_manager/*`     | Robot behavior, schedulers, kinematics, `RobotManager`               |
+| `lib/motor_manager/*`     | Real-time motor stack (YAML-defined masters / controllers / drivers) |
+| `ros2/motion_system_msgs` | Message definitions for motor topics                                 |
+| `ros2/motion_system_pkg`  | ROS bridge to `MotorManager`, joystick integration, launch files     |
+| `ros2/utils_pkg`          | Small test / utility nodes                                           |
+
+
+---
+
+## Further reading
+
+
+| Path                                                                               | Contents                  |
+| ---------------------------------------------------------------------------------- | ------------------------- |
+| [common/common_robot_interface/README.md](common/common_robot_interface/README.md) | Python shared robot types |
+| [common/common_motor_interface/README.md](common/common_motor_interface/README.md) | C++ `motor_frame_t`       |
+| [lib/robot_manager/README.md](lib/robot_manager/README.md)                         | Robot manager stack index |
+| [lib/motor_manager/README.md](lib/motor_manager/README.md)                         | Motor runtime stack index |
+| [ros2/motion_system_msgs/README.md](ros2/motion_system_msgs/README.md)             | `MotorStatus` message     |
+| [ros2/motion_system_pkg/README.md](ros2/motion_system_pkg/README.md)               | Nodes, launches, scripts  |
+
+
+---
+
+## License
+
+Per-package licenses are given in each `package.xml` and any `LICENSE` files (for example MIT for `motion_system_msgs` / `motion_system_pkg`, Apache-2.0 for `utils_pkg`).

@@ -2,16 +2,22 @@
 
 Python package: `common_robot_interface`. Source: `src/common_robot_interface/`.
 
-## Module `common_robot_interface` (`__init__.py`)
+## Package exports (`__all__`)
 
-**Exports (`__all__`)**  
-`Action`, `ActionFrame`, `JointState`, `State`, `StateFrame`
-
-**Usage**
+`Action`, `ActionFrame`, `JointStatus`, `RobotStatus`, `State`, `StateFrame`
 
 ```python
-from common_robot_interface import Action, ActionFrame, JointState, State, StateFrame
+from common_robot_interface import (
+    Action,
+    ActionFrame,
+    JointStatus,
+    RobotStatus,
+    State,
+    StateFrame,
+)
 ```
+
+---
 
 ## `action.py`
 
@@ -30,7 +36,9 @@ from common_robot_interface import Action, ActionFrame, JointState, State, State
 |-------|------|---------|
 | `action` | `Action` | (required) |
 | `duration` | `float` | `0.0` |
-| `goal` | `np.ndarray` | `zeros(3)` |
+| `goal` | `Optional[np.ndarray]` | `None` |
+
+---
 
 ## `state.py`
 
@@ -50,13 +58,34 @@ from common_robot_interface import Action, ActionFrame, JointState, State, State
 | `state` | `State` | (required) |
 | `progress` | `float` | `0.0` |
 
+---
+
 ## `joint.py`
 
-### `@dataclass(frozen=True, slots=True) class JointState`
+### `@dataclass(slots=True) class JointStatus`
+
+Aggregated joint / motor feedback or command buffers (global or per-robot slices).
 
 | Field | Type | Default |
 |-------|------|---------|
-| `motor_id` | `np.ndarray` | (required) |
+| `motor_id` | `Optional[np.ndarray]` | `None` |
+| `interface_id` | `Optional[np.ndarray]` | `None` |
 | `position` | `Optional[np.ndarray]` | `None` |
 | `velocity` | `Optional[np.ndarray]` | `None` |
 | `torque` | `Optional[np.ndarray]` | `None` |
+
+---
+
+## `robot.py`
+
+### `@dataclass(slots=True) class RobotStatus`
+
+High-level robot snapshot (pose, feet, wrench, etc.).
+
+| Field | Type |
+|-------|------|
+| `robot_id` | `int` |
+| `pose` | `np.ndarray` |
+| `point` | `np.ndarray` |
+| `twist` | `np.ndarray` |
+| `wrench` | `np.ndarray` |

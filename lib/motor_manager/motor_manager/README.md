@@ -60,7 +60,7 @@ Namespace: `motor_manager`
 
 | Method | Meaning |
 |--------|---------|
-| `loadConfigurations` | Parses YAML: `period`, `masters` (EtherCAT path builds `EthercatMaster` + `EthercatController` per slave), `drivers` (Minas path builds `MinasDriver`, resolves `param_file` relative to config dir, calls `loadParameters`). |
+| `loadConfigurations` | Parses YAML: `period`, `masters` (EtherCAT builds `EthercatMaster` + `EthercatController` per slave), `drivers` (`"minas"` → `MinasDriver`, `"zeroerr"` → `ZeroerrDriver`; resolves `param_file` relative to the config directory and calls `loadParameters`). |
 | `initialize` | `master->initialize()` for all; each controller `initialize(master, driver)`. |
 | `start` / `stop` | All masters `activate` / `deactivate`. |
 | `enable` | Calls `enable()` on each controller until all succeed (`is_enable_`). |

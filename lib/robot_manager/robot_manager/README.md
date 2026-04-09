@@ -1,10 +1,10 @@
 # robot_manager (package)
 
-Python package: `robot_manager`. Source: `src/robot_manager/robot_manager.py`.
+Python package: `robot_manager`. Implementation: `src/robot_manager/robot_manager.py`.
 
 ## `class RobotManager`
 
-Loads robot YAML and creates one robot instance per `robots` row.
+Loads a robot YAML file and constructs one `Robot` instance per `robots` list entry (`silver_lain`, `little_reader`, …).
 
 ### Properties
 
@@ -12,32 +12,59 @@ Loads robot YAML and creates one robot instance per `robots` row.
 |----------|------|
 | `dt` | `float` |
 | `number_of_robots` | `int` |
-| `number_of_motors` | `int` |
+| `number_of_motors` | `int` (sum of `controller_indexes` lengths) |
 
 ### Public methods
 
-| Method | Signature | Notes |
-|--------|-----------|-------|
-| `stride_length` | `(robot_id: int) -> float` | For walk duration scaling. |
-| `get_state` | `(robot_id: int) -> StateFrame` | High-level scheduler state. |
-| `set_action` | `(action_frame_list: list[ActionFrame]) -> None` | Per-robot action dispatch. |
-| `get_robot_states` | `(robot_id: int) -> RobotState` | Kinematics-derived robot state. |
-| `set_joint_states` | `(joint_states: JointState) -> None` | Splits global arrays by each robot's `controller_indexes`. |
+| Method | Signature | Role |
+|--------|-----------|------|
+| `stride_length` | `(robot_id: int) -> float` | Per-robot stride. |
+| `duration` | `(robot_id: int) -> float` | Per-robot default duration. |
+| `get_state_frame` | `(robot_id: int) -> StateFrame` | Scheduler state. |
+| `set_action_frame` | `(action_frame_list: list[ActionFrame]) -> JointStatus` | Dispatches each frame, merges joint commands into a global `JointStatus` (starting from home pose baseline). |
+| `get_robot_status` | `(robot_id: int) -> RobotStatus` | Kinematics / pose snapshot. |
+| `update_joint_status` | `(joint_status: JointStatus) -> None` | Splits global arrays by each robot’s `controller_indexes` and calls `robot.update_joint_status`. |
+| `reset` | `() -> None` | Calls `reset()` on every robot. |
 
-### YAML keys used
+If the config path is missing or invalid, the manager keeps defaults (`dt = 0.01`, zero robots/motors).
+
+### YAML consumed by `_loadConfigurations`
+
+Top-level keys:
+
+| Key | Role |
+|-----|------|
+| `dt` | Control period (float). |
+| `robots` | List of per-robot dicts (see below). |
+
+Each **robot row**:
+
+| Key | Role |
+|-----|------|
+| `id` | Robot id (int, default `0`). |
+| `robot` | Implementation key: `silver_lain`, `little_reader`, … |
+| `stride_length` | Float. |
+| `clearance` | Float (default `0.05`). |
+| `duration` | Float (default `5.0`). |
+| `home_joint_positions` | List / array of joint positions. |
+| `home_pose` | Length-6 pose vector. |
+| `controller_indexes` | int32 array — indices into the global motor vector / `motor_state` ordering. |
+| `interface_ids` | int32 array — same length as `controller_indexes`; passed through to command messages. |
+
+Example (abbreviated):
 
 ```yaml
 dt: 0.01
-number_of_robots: 2
 robots:
   - id: 0
     robot: silver_lain
-    stride_length: 0.1
-    controller_indexes: [0, ..., 17]
-  - id: 1
-    robot: silver_lain
-    stride_length: 0.15
-    controller_indexes: [18, ..., 35]
+    duration: 5.0
+    stride_length: 0.2
+    clearance: 0.15
+    home_joint_positions: [0.0, ...]
+    home_pose: [0.0, 0.0, 0.7788, 0.0, 0.0, 0.0]
+    controller_indexes: [0, 1, 2, ...]
+    interface_ids: [1, 1, 1, ...]
 ```
 
-`controller_indexes` is used to map `/motor_state` frames into per-robot `JointState`.
+See `ros2/motion_system_pkg/config/silver_lain.yaml` for a full sample.

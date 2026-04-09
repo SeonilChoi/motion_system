@@ -1,4 +1,4 @@
-# motion system
+# Motion System
 
 ROS 2 workspace for robot motion: a **real-time motor stack** (EtherCAT with MINAS / ZeroErr drivers, and related plumbing) and a **Python robot / scheduler / kinematics** layer. The `motion_system_pkg` nodes connect joystick and high-level robot state to the low-level `MotorManager`.
 

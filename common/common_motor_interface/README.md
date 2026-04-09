@@ -2,13 +2,15 @@
 
 Shared C++ motor **data** types (`ament_cmake`). Header: `include/common_motor_interface/motor_frame.hpp`. Namespace: `motor_interface`.
 
-## `MAX_INTERFACE_SIZE`
+## Constants (namespace scope)
 
 | Name | Type | Value | Meaning |
 |------|------|-------|---------|
 | `MAX_INTERFACE_SIZE` | `uint8_t` (`inline constexpr`) | `16` | Max length of `target_interface_id[]` per `motor_frame_t`. |
 
-## `motor_frame_t`
+## Structs
+
+### `motor_frame_t`
 
 | Field | Type | Default | Meaning |
 |-------|------|---------|---------|

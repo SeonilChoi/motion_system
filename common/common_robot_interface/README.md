@@ -1,91 +1,56 @@
 # common_robot_interface
 
-Python package: `common_robot_interface`. Source: `src/common_robot_interface/`.
+Shared Python types for high-level robot logic (`ament_python`). Exports: `Action`, `ActionFrame`, `JointStatus`, `RobotStatus`, `State`, `StateFrame`.
 
-## Package exports (`__all__`)
+## `Action` (enum)
 
-`Action`, `ActionFrame`, `JointStatus`, `RobotStatus`, `State`, `StateFrame`
+| Value | Meaning |
+|-------|---------|
+| `HOME` | Home / homing intent. |
+| `MOVE` | Move / operate intent. |
+| `WALK` | Gait / walk intent. |
+| `STOP` | Stop intent. |
 
-```python
-from common_robot_interface import (
-    Action,
-    ActionFrame,
-    JointStatus,
-    RobotStatus,
-    State,
-    StateFrame,
-)
-```
+## `ActionFrame` (dataclass)
 
----
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `action` | `Action` | (required) | Which action to run. |
+| `duration` | `float` | `0.0` | Action horizon (seconds); gait / planner use. |
+| `goal` | `Optional[np.ndarray]` | `None` | Goal vector (e.g. 3D: direction + yaw rate); semantics depend on scheduler / robot. |
 
-## `action.py`
+## `State` (enum)
 
-### `class Action(Enum)`
+| Value | Meaning |
+|-------|---------|
+| `HOMMING` | Homing in progress. |
+| `OPERATING` | Non-walk operation. |
+| `WALKING` | Walk / gait active. |
+| `STOPPED` | Idle / stopped. |
 
-| Member |
-|--------|
-| `HOME` |
-| `MOVE` |
-| `WALK` |
-| `STOP` |
+## `StateFrame` (dataclass)
 
-### `@dataclass(frozen=True, slots=True) class ActionFrame`
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `state` | `State` | (required) | Current high-level state. |
+| `progress` | `float` | `0.0` | Sub-phase progress in \([0, 1]\) (scheduler-defined). |
 
-| Field | Type | Default |
+## `JointStatus` (dataclass)
+
+| Field | Type | Default | Meaning |
+|-------|------|---------|---------|
+| `motor_id` | `Optional[np.ndarray]` | `None` | Global or local motor / controller indices. |
+| `interface_id` | `Optional[np.ndarray]` | `None` | Drive interface indices (maps to `MotorStatus.target_interface_id`). |
+| `position` | `Optional[np.ndarray]` | `None` | Joint positions (rad or drive units after conversion). |
+| `velocity` | `Optional[np.ndarray]` | `None` | Joint velocities. |
+| `torque` | `Optional[np.ndarray]` | `None` | Joint torques. |
+
+## `RobotStatus` (dataclass)
+
+| Field | Type | Meaning |
 |-------|------|---------|
-| `action` | `Action` | (required) |
-| `duration` | `float` | `0.0` |
-| `goal` | `Optional[np.ndarray]` | `None` |
-
----
-
-## `state.py`
-
-### `class State(Enum)`
-
-| Member |
-|--------|
-| `HOMMING` |
-| `OPERATING` |
-| `WALKING` |
-| `STOPPED` |
-
-### `@dataclass(frozen=True, slots=True) class StateFrame`
-
-| Field | Type | Default |
-|-------|------|---------|
-| `state` | `State` | (required) |
-| `progress` | `float` | `0.0` |
-
----
-
-## `joint.py`
-
-### `@dataclass(slots=True) class JointStatus`
-
-Aggregated joint / motor feedback or command buffers (global or per-robot slices).
-
-| Field | Type | Default |
-|-------|------|---------|
-| `motor_id` | `Optional[np.ndarray]` | `None` |
-| `interface_id` | `Optional[np.ndarray]` | `None` |
-| `position` | `Optional[np.ndarray]` | `None` |
-| `velocity` | `Optional[np.ndarray]` | `None` |
-| `torque` | `Optional[np.ndarray]` | `None` |
-
----
-
-## `robot.py`
-
-### `@dataclass(slots=True) class RobotStatus`
-
-High-level robot snapshot (pose, feet, wrench, etc.).
-
-| Field | Type |
-|-------|------|
-| `robot_id` | `int` |
-| `pose` | `np.ndarray` |
-| `point` | `np.ndarray` |
-| `twist` | `np.ndarray` |
-| `wrench` | `np.ndarray` |
+| `robot_id` | `int` | Robot index in a multi-robot setup. |
+| `pose` | `np.ndarray` | Base / body pose (6-DOF layout used by the robot implementation). |
+| `point` | `np.ndarray` | Foot / feature points (e.g. shape `(6, 3)`). |
+| `twist` | `np.ndarray` | Twist (6-DOF). |
+| `wrench` | `np.ndarray` | Wrench (6-DOF). |

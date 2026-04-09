@@ -1,154 +1,81 @@
 # motor_interface
 
-Headers under `include/motor_interface/`. Namespace: `motor_interface` unless noted.  
-Uses `motor_frame_t` and `MAX_INTERFACE_SIZE` from `common_motor_interface/motor_frame.hpp`.
+C++ **motor abstraction** headers (`ament_cmake`). Namespace: `motor_interface`. Process command/status payloads use `motor_frame_t` from `common_motor_interface/motor_frame.hpp`.
 
-## `motor_master.hpp`
-
-### `struct master_config_t`
+## `master_config_t` (`motor_master.hpp`)
 
 | Field | Type | Meaning |
 |-------|------|---------|
-| `id` | `uint8_t` | Master instance id. |
+| `id` | `uint8_t` | Master instance id (YAML `masters[].id`). |
 | `number_of_slaves` | `uint8_t` | Slave count on this master. |
-| `master_index` | `unsigned int` | IgH master index (EtherCAT). |
+| `master_index` | `unsigned int` | IgH EtherCAT master index (EtherCAT only). |
 
-### `class MotorMaster` (abstract)
+## `slave_config_t` (`motor_controller.hpp`)
 
-#### Constructor
+| Field | Type | Meaning |
+|-------|------|---------|
+| `controller_index` | `uint8_t` | Dense index in `MotorManager` controller array. |
+| `master_id` | `uint8_t` | Owning `MotorMaster` id. |
+| `driver_id` | `uint8_t` | `MotorDriver` id for PDO mapping / scaling. |
+| `alias` | `uint16_t` | EtherCAT alias. |
+| `position` | `uint16_t` | EtherCAT ring position. |
+| `vendor_id` | `uint32_t` | Slave vendor id. |
+| `product_id` | `uint32_t` | Slave product code. |
 
-`explicit MotorMaster(const master_config_t& config)` — stores `id_`, `number_of_slaves_`.
+## `driver_config_t` (`motor_driver.hpp`)
 
-#### Public virtual methods
+| Field | Type | Meaning |
+|-------|------|---------|
+| `id` | `uint8_t` | Driver instance id. |
+| `pulse_per_revolution` | `uint32_t` | Encoder pulses per revolution (scaling). |
+| `rated_torque` | `double` | Rated torque (Nm, drive datasheet). |
+| `unit_torque` | `double` | Raw unit ↔ Nm scale. |
+| `lower` | `double` | Position or command lower limit (drive units / physical). |
+| `upper` | `double` | Upper limit. |
+| `speed` | `double` | Speed limit / profile parameter. |
+| `acceleration` | `double` | Acceleration limit. |
+| `deceleration` | `double` | Deceleration limit. |
+| `profile_velocity` | `double` | Profile velocity. |
+| `profile_acceleration` | `double` | Profile acceleration. |
+| `profile_deceleration` | `double` | Profile deceleration. |
 
-| Method | Meaning |
-|--------|---------|
-| `initialize` | One-time setup. |
-| `activate` | Bring master online for cyclic IO. |
-| `deactivate` | Tear down / stop IO. |
-| `transmit` | Send process data. |
-| `receive` | Receive process data. |
-| `apply_application_time` | Pass application time to stack (DC sync). |
-| `save_clock` | Clock sync housekeeping. |
+## `entry_table_t` (`motor_driver.hpp`)
 
-#### Accessors
+| Field | Type | Meaning |
+|-------|------|---------|
+| `id` | `uint8_t` | Semantic id (see table below). |
+| `index` | `uint16_t` | CANopen / object dictionary index. |
+| `subindex` | `uint8_t` | Subindex. |
+| `type` | `DataType` | `U8` … `S32`. |
+| `size` | `uint8_t` | Payload size in bytes (≤ `MAX_DATA_SIZE`). |
+| `data` | `uint8_t[MAX_DATA_SIZE]` | Little-endian raw value buffer. |
 
-`id()`, `number_of_slaves()`
+## Semantic `id` values (`motor_driver.hpp`)
 
-#### Protected
+| Constant | Value | Typical role |
+|----------|-------|----------------|
+| `ID_CONTROLWORD` | 0 | CiA402 controlword |
+| `ID_TARGET_POSITION` | 1 | Target position |
+| `ID_TARGET_VELOCITY` | 2 | Target velocity |
+| `ID_TARGET_TORQUE` | 3 | Target torque |
+| `ID_STATUSWORD` | 4 | Statusword |
+| `ID_ERRORCODE` | 5 | Error code |
+| `ID_CURRENT_POSITION` | 6 | Actual position |
+| `ID_CURRENT_VELOCITY` | 7 | Actual velocity |
+| `ID_CURRENT_TORQUE` | 8 | Actual torque |
 
-`id_`, `number_of_slaves_`
+## `DataType` (enum)
 
----
+`U8`, `U16`, `U32`, `U64`, `S8`, `S16`, `S32` — used in `entry_table_t` and YAML parameter files.
 
-## `motor_controller.hpp`
+## `DriverState` (enum)
 
-### `struct slave_config_t`
+`SwitchOnDisabled`, `ReadyToSwitchOn`, `SwitchedOn`, `OperationEnabled` — CiA402-style state for enable sequencing.
 
-| Field | Meaning |
-|-------|---------|
-| `controller_index` | Index in manager’s controller array. |
-| `master_id` | Which `MotorMaster` owns this slave. |
-| `driver_id` | Which `MotorDriver` provides mapping. |
-| `alias`, `position` | EtherCAT topology addressing. |
-| `vendor_id`, `product_id` | Slave identity. |
+## Class roles (no field tables)
 
-### `class MotorController` (abstract)
+- **`MotorMaster`** — Cyclic bus I/O (`initialize`, `activate`, `transmit`, `receive`, DC time APIs).
+- **`MotorController`** — One slave: maps `motor_frame_t` ↔ process data via driver `entry_table_t` / interfaces.
+- **`MotorDriver`** — Vendor PDO map, scaling, `loadParameters`, enable/disable checks.
 
-#### Constructor
-
-Binds `index_`, `master_id_`, `driver_id_`.
-
-#### Public virtual methods
-
-| Method | Meaning |
-|--------|---------|
-| `initialize(MotorMaster&, MotorDriver&)` | Wire PDOs / SDOs to master and driver. |
-| `enable` | `bool` success per slave. |
-| `disable` | `bool` success per slave. |
-| `check(const motor_frame_t& status)` | Validate/transition drive state from status. |
-| `write(const motor_frame_t& command)` | Apply command to process data. |
-| `read(motor_frame_t& status)` | Fill `motor_frame_t` from process data. |
-
-#### Accessors
-
-`master_id()`, `driver_id()`
-
-#### Protected virtual
-
-`registerEntries()`, `writeData(...)`, `readData(...)`
-
-#### Protected fields
-
-`driver_`, `current_driver_state_`, `index_`, `master_id_`, `driver_id_`
-
----
-
-## `motor_driver.hpp`
-
-### Constants
-
-| Name | Value | Typical PDO meaning |
-|------|-------|---------------------|
-| `MAX_DATA_SIZE` | 4 | Bytes per `entry_table_t::data`. |
-| `MAX_ITEM_SIZE` | 32 | Max SDO/item entries. |
-| `ID_CONTROLWORD` … `ID_CURRENT_TORQUE` | 0–8 | Semantic ids for items/interfaces. |
-
-### `enum class DataType`
-
-`U8`, `U16`, `U32`, `U64`, `S8`, `S16`, `S32`
-
-### `enum class DriverState`
-
-`SwitchOnDisabled`, `ReadyToSwitchOn`, `SwitchedOn`, `OperationEnabled`
-
-### `struct driver_config_t`
-
-Numeric limits and profile parameters: `id`, `pulse_per_revolution`, `rated_torque`, `unit_torque`, `lower`, `upper`, `speed`, `acceleration`, `deceleration`, `profile_velocity`, `profile_acceleration`, `profile_deceleration`.
-
-### `struct entry_table_t`
-
-| Field | Meaning |
-|-------|---------|
-| `id` | Semantic id (e.g. `ID_CONTROLWORD`). |
-| `index`, `subindex` | Object dictionary address. |
-| `type` | `DataType`. |
-| `size` | Payload size in bytes. |
-| `data` | Raw little-endian buffer (`MAX_DATA_SIZE`). |
-
-### `toDataType(const std::string&) -> DataType`
-
-Parses `"u8"`, `"u16"`, … throws on invalid.
-
-### `template value<T>(const uint8_t* data) -> T`
-
-Little-endian decode from `data`.
-
-### `template fill<T>(const T& value, uint8_t* data)`
-
-Little-endian encode into `data`.
-
-### `class MotorDriver` (abstract)
-
-#### Constructor
-
-`explicit MotorDriver(const driver_config_t& config)` — stores `config_`.
-
-#### Public virtual methods
-
-| Method | Meaning |
-|--------|---------|
-| `loadParameters(const std::string& param_file)` | Load YAML/parameter file for PDO map and scaling. |
-| `isEnabled` / `isDisabled` | Interpret raw `data` with `DriverState` machine; write `out` controlword bytes if needed. |
-| `isReceived` | Check setpoint acknowledgment. |
-| `position` / `velocity` / `torque` | Overloads: raw ↔ physical double conversions (drive units). |
-
-#### Const accessors
-
-`items()`, `interfaces()`, `number_of_items()`, `number_of_interfaces()`, `number_of_rx_interfaces()`, `number_of_tx_interfaces()`
-
-#### Protected members
-
-`items_[MAX_ITEM_SIZE]`, `interfaces_[MAX_INTERFACE_SIZE]`, counters, `config_`
-
-**Note:** `interfaces_` capacity is `MAX_INTERFACE_SIZE` from `common_motor_interface` (16), not `MAX_ITEM_SIZE`.
+Constants: `MAX_DATA_SIZE` = 4, `MAX_ITEM_SIZE` = 32 (items vs interfaces; interface count capped by `MAX_INTERFACE_SIZE` in `common_motor_interface`).

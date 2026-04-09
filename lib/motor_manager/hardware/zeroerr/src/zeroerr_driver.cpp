@@ -7,9 +7,9 @@
 
 namespace {
 
-constexpr uint16_t CW_SHUTDOWN = 0x0006;
-constexpr uint16_t CW_SWITCH_ON = 0x0007;
-constexpr uint16_t CW_ENABLE_OPERATION = 0x000F;
+constexpr uint16_t CW_SHUTDOWN = 0x0026;
+constexpr uint16_t CW_SWITCH_ON = 0x0027;
+constexpr uint16_t CW_ENABLE_OPERATION = 0x002F;
 constexpr uint16_t CW_DISABLE_VOLTAGE = 0x0000;
 constexpr uint16_t CW_DISABLE_OPERATION = 0x0007;
 constexpr uint16_t CW_FAULT_RESET = 0x0080;
@@ -187,7 +187,7 @@ bool zeroerr::ZeroerrDriver::isEnabled(const uint8_t* data, motor_interface::Dri
         cw = CW_SHUTDOWN;
         if (isReadyToSwitchOn(sw)) driver_state = motor_interface::DriverState::ReadyToSwitchOn;
         break;
-    } case motor_interface::DriverState::ReadToSwitchOn: {
+    } case motor_interface::DriverState::ReadyToSwitchOn: {
         cw = CW_SWITCH_ON;
         if (isSwitchedOn(sw)) driver_state = motor_interface::DriverState::SwitchedOn;
         break;

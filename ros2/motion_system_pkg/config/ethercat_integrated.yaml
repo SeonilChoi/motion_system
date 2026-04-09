@@ -1,0 +1,72 @@
+period: 1000000
+masters:
+  - id: 0
+    type: ethercat
+    number_of_slaves: 5
+    master_index: 0
+    slaves:
+      - controller_index: 0
+        driver_id: 0
+        alias: 1
+        position: 0
+        vendor_id: 0x0000066F
+        product_id: 0x60380004
+
+      - controller_index: 1
+        driver_id: 0
+        alias: 1
+        position: 1
+        vendor_id: 0x0000066F
+        product_id: 0x60380004
+
+      - controller_index: 2
+        driver_id: 1
+        alias: 2
+        position: 0
+        vendor_id: 0x5a65726f
+        product_id: 0x00029252
+
+      - controller_index: 3
+        driver_id: 1
+        alias: 2
+        position: 1
+        vendor_id: 0x5a65726f
+        product_id: 0x00029252
+
+      - controller_index: 4
+        driver_id: 1
+        alias: 2
+        position: 2
+        vendor_id: 0x5a65726f
+        product_id: 0x00029252
+
+drivers:
+  - id: 0
+    pulse_per_revolution: 8388608
+    rated_torque: 0.16
+    unit_torque: 0.1
+    lower: -3.14
+    upper: 3.14
+    speed: 2000
+    acceleration: 1.0
+    deceleration: 1.0
+    profile_velocity: 1.0
+    profile_acceleration: 1.0
+    profile_deceleration: 1.0
+    type: minas
+    param_file: ../param/minas_a6.yaml
+
+  - id: 1
+    pulse_per_revolution: 524288
+    rated_torque: 52.0
+    unit_torque: 0.1
+    lower: -3.14
+    upper: 3.14
+    speed: 2000
+    acceleration: 1.0
+    deceleration: 1.0
+    profile_velocity: 1.0
+    profile_acceleration: 1.0
+    profile_deceleration: 1.0
+    type: zeroerr
+    param_file: ../param/zeroerr_v6.yaml

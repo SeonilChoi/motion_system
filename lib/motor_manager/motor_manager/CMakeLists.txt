@@ -9,7 +9,9 @@ target_link_libraries(motor_manager
   PUBLIC  motor_interface::motor_interface
   PRIVATE ethercat::ethercat
   PRIVATE minas::minas
+  PRIVATE zeroerr::zeroerr
   PRIVATE yaml-cpp
+  PRIVATE "${MOTOR_MANAGER_IGH_ETHERCAT_LIB}"
 )
 
 target_compile_features(motor_manager PUBLIC cxx_std_17)

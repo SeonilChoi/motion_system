@@ -12,7 +12,9 @@
 #include "motor_manager/motor_manager.hpp"
 #include "ethercat/ethercat_master.hpp"
 #include "ethercat/ethercat_controller.hpp"
+
 #include "minas/minas_driver.hpp"
+#include "zeroerr/zeroerr_driver.hpp"
 
 namespace {
 
@@ -104,6 +106,9 @@ void motor_manager::MotorManager::loadConfigurations(const std::string& config_f
         switch (toDriverType(d["type"].as<std::string>())) {
         case DriverType::Minas: {
             drivers_[d_cfg.id] = std::make_unique<minas::MinasDriver>(d_cfg);
+            break;
+        } case DriverType::Zeroerr: {
+            drivers_[d_cfg.id] = std::make_unique<zeroerr::ZeroerrDriver>(d_cfg);
             break;
         } default: {
             throw std::runtime_error("Invalid driver type.");

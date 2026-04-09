@@ -365,7 +365,7 @@ void ethercat::EthercatController::addSlaveConfigPdos()
     ec_sync_info_t sync_infos[] = {
         {0, EC_DIR_OUTPUT, 0, nullptr,       EC_WD_DISABLE},
         {1, EC_DIR_INPUT,  0, nullptr,       EC_WD_DISABLE},
-        {2, EC_DIR_OUTPUT, 1, pdo_infos,     EC_WD_DISABLE},
+        {2, EC_DIR_OUTPUT, 1, pdo_infos,     EC_WD_ENABLE },
         {3, EC_DIR_INPUT,  1, pdo_infos + 1, EC_WD_DISABLE},
         {0xFF}
     };

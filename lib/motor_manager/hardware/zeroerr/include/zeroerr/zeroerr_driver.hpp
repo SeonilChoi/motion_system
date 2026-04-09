@@ -7,11 +7,11 @@
 
 namespace zeroerr {
 
-inline constexpr uint8_t ID_MIN_POSITION_LIMIT = 51;
-inline constexpr uint8_t ID_MAX_POSITION_LIMIT = 52;
-inline constexpr uint8_t ID_PROFILE_VELOCITY = 54;
-inline constexpr uint8_t ID_PROFILE_ACCELERATION = 55;
-inline constexpr uint8_t ID_PROFILE_DECELERATION = 56;
+inline constexpr uint8_t ID_MIN_POSITION_LIMIT = 50;
+inline constexpr uint8_t ID_MAX_POSITION_LIMIT = 51;
+inline constexpr uint8_t ID_PROFILE_VELOCITY = 52;
+inline constexpr uint8_t ID_PROFILE_ACCELERATION = 53;
+inline constexpr uint8_t ID_PROFILE_DECELERATION = 54;
 inline constexpr uint8_t ID_RXPDO = 98;
 inline constexpr uint8_t ID_TXPDO = 99;
 

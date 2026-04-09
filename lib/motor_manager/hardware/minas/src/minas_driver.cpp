@@ -111,7 +111,6 @@ void minas::MinasDriver::loadParameters(const std::string& param_file)
         } else if (e_cfg.id == ID_MAX_DECELERATION) {
             motor_interface::fill<uint32_t>(
                 static_cast<uint32_t>(config_.deceleration / (2 * M_PI) * config_.pulse_per_revolution),
-                //uint32_t(2500000),
                 e_cfg.data
             );
         } else {

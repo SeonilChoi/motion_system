@@ -22,7 +22,10 @@ from rclpy.qos import QoSHistoryPolicy, QoSProfile, QoSReliabilityPolicy
 from std_msgs.msg import Int8MultiArray
 from motion_system_msgs.msg import MotorStatus
 
-N_MOTORS = 2
+N_MOTORS = 5
+
+CW_NEW_SET_POINT_MINAS = 0x003F
+CW_NEW_SET_POINT_ZEROERR = 0x103F
 
 
 def _motor_command_qos() -> QoSProfile:
@@ -51,16 +54,17 @@ class SineMotorCommandPublisher(Node):
         msg.target_interface_id = [Int8MultiArray(data=[0, 1]) for _ in range(n)]
         msg.controller_index = list(range(n))
         z = [0] * n
-        msg.controlword = [int(0x3F)] * n
+        msg.controlword = [int(CW_NEW_SET_POINT_MINAS) if i < 2 else int(CW_NEW_SET_POINT_ZEROERR) for i in range(n)]
         msg.statusword = z
         msg.errorcode = z
         msg.velocity = [0.0] * n
         msg.torque = [0.0] * n
 
-        w = 2.0 * math.pi * 0.5
+        w = 2.0 * math.pi * 0.1
         msg.position = [math.sin(w * self._t) for _ in range(n)]
+        #msg.position = [1.0 for _ in range(n)]
         self._pub.publish(msg)
-        self._t += 0.001
+        self._t += 0.01
 
 
 def main() -> None:

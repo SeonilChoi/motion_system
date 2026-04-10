@@ -2,31 +2,34 @@
 
 C++ motor abstraction headers (`ament_cmake`). Namespace: `motor_interface`. Command/status payloads use `motor_frame_t` from `common_motor_interface/motor_frame.hpp`.
 
+## Class relationship graph
+
+Solid arrows: compile-time / structural ties in the headers. Dashed: payload type exchanged by `MotorController` (not owned by these classes).
+
+```mermaid
+flowchart TB
+  subgraph motor_interface_classes["motor_interface (abstract classes)"]
+    MM[MotorMaster]
+    CTRL[MotorController]
+    DRV[MotorDriver]
+  end
+
+  MF["motor_frame_t\n(common_motor_interface)"]
+
+  CTRL -->|"initialize(..., MotorMaster&, MotorDriver&)"| MM
+  CTRL -->|"MotorDriver* driver_"| DRV
+  CTRL <-.->|"read / write / check"| MF
+```
+
+At runtime, concrete `MotorController::initialize` receives the specific `MotorMaster` and `MotorDriver` instances (e.g. EtherCAT + vendor driver); the controller maps `motor_frame_t` to process data using the driver’s `entry_table_t` layout.
+
 ---
 
 ## `include/motor_interface/motor_master.hpp`
 
 ### Classes
 
-#### `MotorMaster`
-
-Abstract bus master: lifecycle, cyclic `transmit` / `receive`, and DC clock hooks.
-
-| Kind | Name | Notes |
-|------|------|--------|
-| ctor | `MotorMaster(const master_config_t& config)` | Stores `id` and slave count from config. |
-| dtor | `virtual ~MotorMaster() = default` | |
-| method | `virtual void initialize() = 0` | |
-| method | `virtual void activate() = 0` | |
-| method | `virtual void deactivate() = 0` | |
-| method | `virtual void transmit() = 0` | Send process data. |
-| method | `virtual void receive() = 0` | Receive process data. |
-| method | `virtual void apply_application_time(const timespec& time) = 0` | Distributed clock / app time. |
-| method | `virtual void save_clock() = 0` | |
-| method | `uint8_t id() const` | Master instance id. |
-| method | `uint8_t number_of_slaves() const` | Slave count on this master. |
-
-Protected members: `id_` (`uint8_t`), `number_of_slaves_` (`uint8_t`).
+- **`MotorMaster`** — Abstract fieldbus master: activation, cyclic exchange, distributed-clock hooks. Constructed from **`master_config_t`**.
 
 ### Structs
 
@@ -46,24 +49,7 @@ Depends on `motor_master.hpp`, `motor_driver.hpp`, and `common_motor_interface/m
 
 ### Classes
 
-#### `MotorController`
-
-Abstract per-slave controller: maps `motor_frame_t` ↔ process data via the driver’s `entry_table_t` / interface layout.
-
-| Kind | Name | Notes |
-|------|------|--------|
-| ctor | `MotorController(const slave_config_t& config)` | Stores controller index, `master_id`, `driver_id`. |
-| dtor | `virtual ~MotorController() = default` | |
-| method | `virtual void initialize(MotorMaster& master, MotorDriver& driver) = 0` | |
-| method | `virtual bool enable() = 0` | |
-| method | `virtual bool disable() = 0` | |
-| method | `virtual void check(const motor_frame_t& status) = 0` | |
-| method | `virtual void write(const motor_frame_t& command) = 0` | |
-| method | `virtual void read(motor_frame_t& status) = 0` | |
-| method | `uint8_t master_id() const` | |
-| method | `uint8_t driver_id() const` | |
-
-Protected: `virtual void registerEntries() = 0`; `virtual void writeData(const entry_table_t* rx_interfaces, uint8_t number_of_rx_interfaces) = 0`; `virtual void readData(entry_table_t* tx_interfaces, uint8_t number_of_tx_interfaces) = 0`; `MotorDriver* driver_{nullptr}`; `DriverState current_driver_state_{DriverState::SwitchOnDisabled}`; `index_`, `master_id_`, `driver_id_` (`const uint8_t`).
+- **`MotorController`** — Abstract per-slave bridge: ties one **`MotorMaster`** and one **`MotorDriver`** after `initialize`, maps **`motor_frame_t`** ↔ PDOs using the driver’s **`entry_table_t`** layout and **`DriverState`**. Constructed from **`slave_config_t`**.
 
 ### Structs
 
@@ -85,32 +71,7 @@ Protected: `virtual void registerEntries() = 0`; `virtual void writeData(const e
 
 ### Classes
 
-#### `MotorDriver`
-
-Abstract vendor driver: YAML parameter load, CiA402-style enable/disable checks, raw ↔ physical scaling, and PDO `entry_table_t` layout (`items_`, `interfaces_`).
-
-| Kind | Name | Notes |
-|------|------|--------|
-| ctor | `MotorDriver(const driver_config_t& config)` | |
-| dtor | `virtual ~MotorDriver() = default` | |
-| method | `virtual void loadParameters(const std::string& param_file) = 0` | |
-| method | `virtual bool isEnabled(const uint8_t* data, DriverState& driver_state, uint8_t* out) = 0` | |
-| method | `virtual bool isDisabled(const uint8_t* data, DriverState& driver_state, uint8_t* out) = 0` | |
-| method | `virtual bool isReceived(const uint8_t* data, uint8_t* out) = 0` | |
-| method | `virtual double position(const int32_t value) = 0` | Raw → physical position. |
-| method | `virtual double velocity(const int32_t value) = 0` | Raw → physical velocity. |
-| method | `virtual double torque(const int16_t value) = 0` | Raw → physical torque. |
-| method | `virtual int32_t position(const double value) = 0` | Physical → raw position. |
-| method | `virtual int32_t velocity(const double value) = 0` | Physical → raw velocity. |
-| method | `virtual int16_t torque(const double value) = 0` | Physical → raw torque. |
-| method | `const entry_table_t* items() const` | PDO / object map entries. |
-| method | `const entry_table_t* interfaces() const` | RX/TX interface slices. |
-| method | `uint8_t number_of_items() const` | |
-| method | `uint8_t number_of_interfaces() const` | Capped by `MAX_INTERFACE_SIZE` (`common_motor_interface`). |
-| method | `uint8_t number_of_rx_interfaces() const` | |
-| method | `uint8_t number_of_tx_interfaces() const` | |
-
-Protected members: `items_[MAX_ITEM_SIZE]`, `interfaces_[MAX_INTERFACE_SIZE]`, `number_of_items_`, `number_of_interfaces_`, `number_of_rx_interfaces_`, `number_of_tx_interfaces_`, `config_` (`const driver_config_t`).
+- **`MotorDriver`** — Abstract vendor driver: PDO / SDO tables (**`entry_table_t`**), scaling, CiA402-style enable sequencing (**`DriverState`**). Constructed from **`driver_config_t`**.
 
 ### Structs
 

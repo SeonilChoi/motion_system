@@ -1,35 +1,34 @@
 # motor_manager (library)
 
-**`MotorManager`**: loads motor YAML (`period`, `masters`, `drivers`), owns cyclic **`write` / `read`** on `motor_frame_t[]`, and runs **`run()`** in a realtime loop (EtherCAT + MINAS / ZeroErr drivers). Constants include `MAX_CONTROLLER_SIZE` (16). See header `include/motor_manager/motor_manager.hpp`.
+`MotorManager` — **`run()`**, **`write()`**, **`read()`** over `motor_frame_t` (`include/motor_manager/motor_manager.hpp`).
 
-## `MotorManager` functions (public)
+---
 
-| Function | Description |
-|----------|-------------|
-| `MotorManager(config_file)` | Calls `loadConfigurations` (YAML: `period`, `masters`, `drivers`), then `initialize` (masters `initialize`, each controller `initialize` with its master and driver). Resolves relative `param_file` paths against the config file’s directory. |
-| `run()` | Sets `running`, activates all masters (`start`), locks memory (`mlockall`), switches to `SCHED_FIFO` at max priority, prefaults stack, then loops until `request_stop`: absolute `clock_nanosleep` for `period_` ns, `apply_application_time` on each master, `receive`, `enable` until all axes report enabled then `update` each cycle, `save_clock`, `transmit`. On exit: unlock memory, `stop` (deactivate masters). Throws on scheduler / sleep / page-size errors. |
-| `request_stop()` | Clears the `running` flag; the next loop iteration exits `run()` and runs `stop()`. |
-| `write(command, size)` | Under `frame_mutex_`, copies up to `min(size, MAX_CONTROLLER_SIZE)` frames into `command_` and sets `is_command_changed_`. |
-| `read(status)` | Under `frame_mutex_`, copies `status_[0..number_of_controllers_)` into `status`. |
-| `period()` | Control-loop period in nanoseconds from YAML `period`. |
-| `number_of_controllers()` | Count of instantiated controllers (slaves across masters). |
+## `run()`
 
-## Namespace functions (`motor_manager`)
+```mermaid
+flowchart LR
+  P[setup + activate] --> A[sleep]
+  A --> B[receive]
+  B --> C[enable / update]
+  C --> D[transmit]
+  D --> A
+  D -.->|stop| Q[deactivate]
+```
 
-| Function | Description |
-|----------|-------------|
-| `toCommunicationType(type)` | Maps `"ethercat"` / `"canopen"` / `"dynamixel"` to `CommunicationType`; throws on unknown string. Only EtherCAT is implemented in `loadConfigurations`. |
-| `toDriverType(type)` | Maps `"minas"` / `"zeroerr"` / `"dynamixel"` to `DriverType`; throws on unknown string. Only Minas and Zeroerr are constructed. |
+`request_stop()` ends the loop; then masters deactivate and memory is unlocked.
 
-## Internal (`motor_manager.cpp`)
+---
 
-Not part of the public API:
+## `write()` · `read()` · `update()`
 
-| Symbol | Description |
-|--------|-------------|
-| `loadConfigurations` | Parses YAML into `masters_`, `controllers_[]`, `drivers_`, `number_of_controllers_`, `period_`. |
-| `initialize` | Sets `frequency_` from `period_`, initializes all masters, wires each controller to its master and driver. |
-| `start` / `stop` | `activate` / `deactivate` every master. |
-| `enable` | Calls `enable()` on each controller until all return true; sets `is_enable_`. |
-| `update` | Under mutex: `read` then `check` on each controller; if commands changed, `write` each `command_[i]`. |
-| `unlock_memory`, `stack_prefault` | Anonymous namespace helpers for `mlockall` / stack prefault in `run()`. |
+```mermaid
+flowchart TB
+  W[write] -->|mutex| BUF["command_ + status_"]
+  R[read] -->|mutex| BUF
+  U[update in run] -->|mutex| BUF
+  U --> BUS[EtherCAT in/out]
+```
+
+- **`write()`** / **`read()`**: other thread; only copy under **`frame_mutex_`** (plus **`is_command_changed_`** on write path).
+- **`update()`**: inside **`run()`**; refreshes **`status_`**, may push **`command_`** to the domain after **`receive`**.

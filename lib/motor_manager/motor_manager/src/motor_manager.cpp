@@ -169,7 +169,7 @@ void motor_manager::MotorManager::write(const motor_interface::motor_frame_t* co
     for (uint8_t i = 0; i < n; ++i) {
         command_[i] = command[i];
     }
-    is_command_changed_ = true;
+    is_command_changed_.store(true, std::memory_order_release);
 }
 
 void motor_manager::MotorManager::read(motor_interface::motor_frame_t* status)
@@ -180,6 +180,16 @@ void motor_manager::MotorManager::read(motor_interface::motor_frame_t* status)
     }
 }
 
+void motor_manager::MotorManager::request_stop()
+{
+    on_disabled_.store(true, std::memory_order_release);
+}
+
+void motor_manager::MotorManager::request_exit()
+{
+    running_.store(false, std::memory_order_release);
+}
+
 void motor_manager::MotorManager::update()
 {
     std::lock_guard<std::mutex> lock(frame_mutex_);
@@ -188,23 +198,16 @@ void motor_manager::MotorManager::update()
         controllers_[i]->check(status_[i]);
     }
 
-    if (is_command_changed_) {
-        is_command_changed_ = false;
+    if (is_command_changed_.exchange(false, std::memory_order_acq_rel)) {
         for (uint8_t i = 0; i < number_of_controllers_; ++i) {
             controllers_[i]->write(command_[i]);
         }
     }
 }
 
-void motor_manager::MotorManager::request_stop()
-{
-    running_.store(false, std::memory_order_release);
-}
-
 void motor_manager::MotorManager::run()
 {
     running_.store(true, std::memory_order_release);
-
     start();
 
     if (sysconf(_SC_PAGESIZE) == -1) {
@@ -267,7 +270,15 @@ void motor_manager::MotorManager::run()
 
         for (auto& m_iter : masters_) m_iter.second->receive();
 
-        if (!is_enable_) enable(); else update();
+        if (!is_enable_) {
+            enable();
+        } else if (is_disabled_) {
+            break;
+        } else if (on_disabled_.load(std::memory_order_acquire)) {
+            disable();
+        } else {
+            update();
+        }
 
         for (auto& m_iter : masters_) m_iter.second->save_clock();
 

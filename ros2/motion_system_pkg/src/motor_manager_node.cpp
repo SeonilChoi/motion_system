@@ -17,6 +17,13 @@ MotorManagerNode::MotorManagerNode(const rclcpp::NodeOptions& options)
         }
     );
 
+    user_command_subscriber_ = this->create_subscription<Empty>(
+        "user_command", rclcpp::QoS(1).best_effort(),
+        [this](const Empty::SharedPtr msg) {
+            user_command_callback(msg);
+        }
+    );
+
     motor_status_publisher_ = this->create_publisher<MotorStatus>(
         "motor_state", rclcpp::QoS(1).best_effort()
     );
@@ -49,7 +56,7 @@ MotorManagerNode::MotorManagerNode(const rclcpp::NodeOptions& options)
 MotorManagerNode::~MotorManagerNode()
 {
     if (motor_manager_) {
-        motor_manager_->request_stop();
+        motor_manager_->request_exit();
     }
     if (manager_run_thread_.joinable()) {
         manager_run_thread_.join();
@@ -83,6 +90,11 @@ void MotorManagerNode::motor_command_callback(const MotorStatus::SharedPtr msg)
     }
 
     motor_manager_->write(motor_frame, size);
+}
+
+void MotorManagerNode::user_command_callback(const Empty::SharedPtr msg)
+{
+    motor_manager_->request_stop();
 }
 
 void MotorManagerNode::timer_callback()

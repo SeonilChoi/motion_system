@@ -54,12 +54,15 @@ public:
 
     void run();
 
-    /** Sets the run loop flag to false; the next cycle exits `run()` and calls hardware `stop()`. */
-    void request_stop();
-
     void write(const motor_interface::motor_frame_t* command, const uint8_t size);
 
     void read(motor_interface::motor_frame_t* status);
+
+    /** `user_command` / Empty: start CiA402 disable until all axes report disabled, then `run()` returns. */
+    void request_stop();
+
+    /** Node teardown: clear the RT loop flag so `run()` exits (after current sleep slice); does not wait for drive disable. */
+    void request_exit();
 
     uint32_t period() const { return period_; }
 
@@ -98,16 +101,17 @@ private:
 
     bool is_disabled_{false};
 
+    std::atomic<bool> on_disabled_{false};
+
     std::atomic<bool> running_{true};
 
     std::mutex frame_mutex_;
 
-    bool is_command_changed_{false};
+    std::atomic<bool> is_command_changed_{false};
 
     motor_interface::motor_frame_t command_[MAX_CONTROLLER_SIZE];
 
     motor_interface::motor_frame_t status_[MAX_CONTROLLER_SIZE];
-
 };
 
 } // namespace motor_manager

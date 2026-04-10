@@ -10,7 +10,7 @@ Only **public** functions, methods, types, and **launch-declared arguments** (pl
 |------|--------|-------------|
 | Type alias | `MotorStatus` | `motion_system_msgs::msg::MotorStatus`. |
 | (ctor) | `MotorManagerNode(const rclcpp::NodeOptions& options = {})` | Creates the node, reads `config_file`, constructs `MotorManager`, starts `run()` on a thread, subscribes `motor_command`, publishes `motor_state`, starts a 1 ms timer. |
-| (dtor) | `~MotorManagerNode()` | `request_stop()` on `MotorManager`, joins the run thread. |
+| (dtor) | `~MotorManagerNode()` | `request_exit()` on `MotorManager` (stops RT loop), joins the run thread. |
 
 | ROS parameter | Description |
 |---------------|-------------|

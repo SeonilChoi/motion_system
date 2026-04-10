@@ -21,6 +21,7 @@ target_include_directories(motor_manager_node PUBLIC
 )
 ament_target_dependencies(motor_manager_node
   rclcpp
+  std_msgs
   motion_system_msgs
 )
 target_link_libraries(motor_manager_node

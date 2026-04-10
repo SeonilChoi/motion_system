@@ -6,12 +6,14 @@
 
 #include "rclcpp/rclcpp.hpp"
 #include "motion_system_msgs/msg/motor_status.hpp"
+#include "std_msgs/msg/empty.hpp"
 
 #include "motor_manager/motor_manager.hpp"
 
 class MotorManagerNode : public rclcpp::Node {
 public:
     using MotorStatus = motion_system_msgs::msg::MotorStatus;
+    using Empty = std_msgs::msg::Empty;
 
     explicit MotorManagerNode(const rclcpp::NodeOptions& options = rclcpp::NodeOptions());
 
@@ -20,9 +22,13 @@ public:
 private:
     void motor_command_callback(const MotorStatus::SharedPtr msg);
 
+    void user_command_callback(const Empty::SharedPtr msg);
+
     void timer_callback();
 
     rclcpp::Subscription<MotorStatus>::SharedPtr motor_command_subscriber_;
+
+    rclcpp::Subscription<Empty>::SharedPtr user_command_subscriber_;
 
     rclcpp::Publisher<MotorStatus>::SharedPtr motor_status_publisher_;
 

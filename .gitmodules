@@ -1,0 +1,11 @@
+[submodule "lib/motor_manager"]
+    path = lib/motor_manager
+    url = https://github.com/SeonilChoi/MOTOR-MANAGER.git
+
+[submodule "ros2/iahrs_driver_ros2"]
+    path = ros2/iahrs_driver_ros2
+    url = https://github.com/SeonilChoi/iahrs_driver_ros2.git
+
+[submodule "ros2/playstation_joy_interface_ros2"]
+    path = ros2/playstation_joy_interface_ros2
+    url = https://github.com/SeonilChoi/PlayStation-JoyInterface-ROS2.git

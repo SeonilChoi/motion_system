@@ -3,7 +3,7 @@ masters:
   - id: 0
     type: ethercat
     number_of_slaves: 1
-    master_index: 0
+    ethercat_master_index: 0
     slaves:
       - controller_index: 0
         driver_id: 0

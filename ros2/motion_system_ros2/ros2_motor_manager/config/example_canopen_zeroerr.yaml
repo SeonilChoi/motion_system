@@ -3,7 +3,6 @@ masters:
   - id: 0
     type: canopen
     number_of_slaves: 1
-    master_index: 0
     can_interface_index: 0 # can0
     can_bitrate: 1000000
     slaves:
@@ -12,21 +11,35 @@ masters:
         node_id: 1
         profile_mode: 0 # 0: Position Mode, 1: Velocity Mode, 2: Torque Mode
 
+  - id: 1
+    type: ethercat
+    number_of_slaves: 1
+    ethercat_master_index: 0
+    slaves:
+      - controller_index: 1
+        driver_id: 0
+        alias: 0
+        position: 0
+        vendor_id: 0x5a65726f
+        product_id: 0x00029252
+        profile_mode: 0 # 0: Position Mode, 1: Velocity Mode, 2: Torque Mode
+
 drivers:
   - id: 0
     pulse_per_revolution: 524288
-    rated_torque: 52.0
+    rated_torque: 25.0
     unit_torque: 0.1
     lower: -1.0
     upper: 1.0
-    speed: 3000
-    acceleration: 2.5
-    deceleration: 2.5
-    profile_velocity: 2.5
-    profile_acceleration: 2.5
-    profile_deceleration: 2.5
+    speed: 2000
+    acceleration: 1.5
+    deceleration: 1.5
+    profile_velocity: 1.5
+    profile_acceleration: 1.5
+    profile_deceleration: 1.5
     profile_position_value: 1
     profile_velocity_value: 3
     profile_torque_value: 4
     type: zeroerr
     param_file: ../param
+  

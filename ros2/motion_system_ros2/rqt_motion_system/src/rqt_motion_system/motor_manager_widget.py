@@ -219,11 +219,14 @@ class MotorManagerWidget(QMainWindow):
         self._select_motor_button.setMenu(menu)
 
     def _initialize_motor_status_msg(self):
-        n_slaves = self._master_infos[0]['number_of_slaves']
+        n_slaves = 0
+        for master in self._master_infos:
+            n_slaves += master['number_of_slaves']
+
         msg = MotorStatus()
         msg.number_of_target_interfaces = [0] * n_slaves
         msg.target_interface_id = [Int8MultiArray(data=[0] * n_slaves) for _ in range(n_slaves)]
-        msg.controller_index = [0] * n_slaves
+        msg.controller_index = [i for i in range(n_slaves)]
         msg.controlword = [0] * n_slaves
         msg.statusword = [0] * n_slaves
         msg.errorcode = [0] * n_slaves

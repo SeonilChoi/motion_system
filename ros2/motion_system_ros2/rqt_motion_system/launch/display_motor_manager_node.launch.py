@@ -10,7 +10,7 @@ import os
 
 def generate_launch_description():
     ros2_motor_manager_pkg_share = get_package_share_directory('ros2_motor_manager')
-    default_motor_config = os.path.join(ros2_motor_manager_pkg_share, 'config', 'example_ethercat_zeroerr.yaml')
+    default_motor_config = os.path.join(ros2_motor_manager_pkg_share, 'config', 'example_canopen_zeroerr.yaml')
 
     motor_config_file_arg = DeclareLaunchArgument(
         'motor_config_file',

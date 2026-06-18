@@ -17,7 +17,7 @@ struct motor_frame_t {
     uint16_t errorcode{};
     double position{};
     double velocity{};
-    double torque{};
+    double effort{};
 };
 
 }  // namespace motor_interface

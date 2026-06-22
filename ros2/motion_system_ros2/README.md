@@ -3,6 +3,7 @@
 ## English Version
 
 `motion_system_ros2` is a ROS 2 package group for motor command/status exchange and operator control.
+
 It provides shared motion control messages, a ROS 2 bridge for `motor_manager`, an RQt control UI, and a MIDI control launch flow for X-Touch.
 
 ### Packages
@@ -47,17 +48,11 @@ Run the RQt UI with the motor manager bridge.
 ros2 launch motion_control_rqt display_motor_manager_node.launch.py
 ```
 
-`display_motor_manager_node.launch.py` starts `motor_manager_node` and `run_rqt` together.
-It uses `motion_control_bridge/config/example.yaml` as the default motor config.
-
 Run the MIDI control flow.
 
 ```bash
 ros2 launch motion_control_midi motion_control_midi_node.launch.py
 ```
-
-`motion_control_midi_node.launch.py` starts `motor_manager_node`, `xtouch_node`, and `motion_control_midi_node` together.
-It uses `motion_control_bridge/config/example_socketcan_cubemars.yaml` as the motor config and runs `xtouch_node` with `btn3_requires_fader_update` set to `true`.
 
 ### Topic
 
@@ -85,6 +80,7 @@ It uses `motion_control_bridge/config/example_socketcan_cubemars.yaml` as the mo
 ## Korean Version
 
 `motion_system_ros2`는 모터 명령/상태 교환과 operator control을 위한 ROS 2 패키지 그룹이다.
+
 shared motion control message, `motor_manager`를 위한 ROS 2 bridge, RQt control UI, X-Touch를 위한 MIDI control launch flow를 제공한다.
 
 ### Packages
@@ -129,17 +125,11 @@ motor manager bridge와 함께 RQt UI를 실행한다.
 ros2 launch motion_control_rqt display_motor_manager_node.launch.py
 ```
 
-`display_motor_manager_node.launch.py`는 `motor_manager_node`와 `run_rqt`를 함께 실행한다.
-기본 motor config는 `motion_control_bridge/config/example.yaml`을 사용한다.
-
 MIDI control flow를 실행한다.
 
 ```bash
 ros2 launch motion_control_midi motion_control_midi_node.launch.py
 ```
-
-`motion_control_midi_node.launch.py`는 `motor_manager_node`, `xtouch_node`, `motion_control_midi_node`를 함께 실행한다.
-motor config는 `motion_control_bridge/config/example_socketcan_cubemars.yaml`을 사용하고, `xtouch_node`는 `btn3_requires_fader_update`를 `true`로 설정해서 실행한다.
 
 ### Topic
 

@@ -37,7 +37,7 @@ source install/setup.bash
 For a motor-manager-only build:
 
 ```bash
-colcon build --symlink-install --packages-up-to ros2_motor_manager
+colcon build --symlink-install --packages-up-to motion_control_bridge
 ```
 
 ## Launch
@@ -47,27 +47,27 @@ Launch the motor manager with the default example config:
 ```bash
 source /opt/ros/humble/setup.bash
 source ~/colcon_ws/install/setup.bash
-ros2 launch ros2_motor_manager motor_manager_node.launch.py
+ros2 launch motion_control_bridge motor_manager_node.launch.py
 ```
 
 Use a specific motor configuration:
 
 ```bash
-ros2 launch ros2_motor_manager motor_manager_node.launch.py \
-  config_file:=~/colcon_ws/src/ros2/motion_system_ros2/ros2_motor_manager/config/example_socketcan_cubemars.yaml
+ros2 launch motion_control_bridge motor_manager_node.launch.py \
+  config_file:=~/colcon_ws/src/ros2/motion_system_ros2/motion_control_bridge/config/example_socketcan_cubemars.yaml
 ```
 
 Other useful launch commands:
 
 ```bash
 # RQt motor control UI with motor manager
-ros2 launch rqt_motion_control display_motor_manager_node.launch.py
+ros2 launch motion_control_rqt display_motor_manager_node.launch.py
 
 # Behringer X-Touch MIDI bridge
 ros2 launch xtouch_midi xtouch_node.launch.py
 
 # MIDI-to-motor command bridge
-ros2 launch midi_motion_control midi_motion_control_node.launch.py
+ros2 launch motion_control_midi motion_control_midi_node.launch.py
 
 # iAHRS IMU driver
 ros2 launch iahrs_driver iahrs_driver.py
@@ -114,5 +114,5 @@ Device/interface drivers included in this workspace:
 Example motor configuration files are available in:
 
 ```text
-ros2/motion_system_ros2/ros2_motor_manager/config/
+ros2/motion_system_ros2/motion_control_bridge/config/
 ```

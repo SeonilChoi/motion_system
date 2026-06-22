@@ -3,7 +3,7 @@
 ## English Version
 
 `common_motor_interface` provides the shared payload type used to exchange
-`motor_status_msgs/msg/MotorStatus` data with `motor_manager`.
+`motion_control_msgs/msg/MotorStatus` data with `motor_manager`.
 
 Each `motor_frame_t` contains the command or status data for one motor
 controller.

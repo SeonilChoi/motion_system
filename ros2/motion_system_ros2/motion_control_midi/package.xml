@@ -10,12 +10,16 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>rclcpp</depend>
+  <depend>ament_index_cpp</depend>
   <depend>std_msgs</depend>
   <depend>midi_msgs</depend>
   <depend>motion_control_msgs</depend>
 
   <build_depend>yaml-cpp</build_depend>
   <exec_depend>yaml-cpp</exec_depend>
+  <exec_depend>ament_index_python</exec_depend>
+  <exec_depend>motion_control_bridge</exec_depend>
+  <exec_depend>xtouch_midi</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
 

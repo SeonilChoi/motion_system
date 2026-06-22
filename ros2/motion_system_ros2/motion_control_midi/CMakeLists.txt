@@ -7,6 +7,7 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(midi_msgs REQUIRED)
@@ -17,6 +18,7 @@ add_executable(motion_control_midi_node
   src/motion_control_midi_node.cpp
 )
 ament_target_dependencies(motion_control_midi_node
+  ament_index_cpp
   rclcpp
   std_msgs
   midi_msgs

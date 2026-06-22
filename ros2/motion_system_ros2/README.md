@@ -58,9 +58,9 @@ ros2 launch motion_control_midi motion_control_midi_node.launch.py
 
 | Name | Type | Payload |
 | --- | --- | --- |
-| `/motor_command` | `motion_control_msgs/msg/MotorStatus` | Motor command consumed by `motion_control_bridge` |
-| `/motor_status` | `motion_control_msgs/msg/MotorStatus` | Motor status published by `motion_control_bridge` |
-| `/user_command` | `std_msgs/msg/Empty` | Stop request consumed by `motion_control_bridge` |
+| `/motion_control/motor_command` | `motion_control_msgs/msg/MotorStatus` | Motor command consumed by `motion_control_bridge` |
+| `/motion_control/motor_status` | `motion_control_msgs/msg/MotorStatus` | Motor status published by `motion_control_bridge` |
+| `/motion_control/request_stop` | `std_msgs/msg/Empty` | Stop request consumed by `motion_control_bridge` |
 | `/xtouch/midi` | `midi_msgs/msg/Midi` | X-Touch MIDI state published by `xtouch_midi` and consumed by `motion_control_midi` |
 
 ### `MotorStatus.msg`
@@ -135,9 +135,9 @@ ros2 launch motion_control_midi motion_control_midi_node.launch.py
 
 | Name | Type | Payload |
 | --- | --- | --- |
-| `/motor_command` | `motion_control_msgs/msg/MotorStatus` | `motion_control_bridge`가 사용하는 motor command |
-| `/motor_status` | `motion_control_msgs/msg/MotorStatus` | `motion_control_bridge`가 publish하는 motor status |
-| `/user_command` | `std_msgs/msg/Empty` | `motion_control_bridge`가 사용하는 stop request |
+| `/motion_control/motor_command` | `motion_control_msgs/msg/MotorStatus` | `motion_control_bridge`가 사용하는 motor command |
+| `/motion_control/motor_status` | `motion_control_msgs/msg/MotorStatus` | `motion_control_bridge`가 publish하는 motor status |
+| `/motion_control/request_stop` | `std_msgs/msg/Empty` | `motion_control_bridge`가 사용하는 stop request |
 | `/xtouch/midi` | `midi_msgs/msg/Midi` | `xtouch_midi`가 publish하고 `motion_control_midi`가 사용하는 X-Touch MIDI state |
 
 ### `MotorStatus.msg`

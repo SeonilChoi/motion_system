@@ -81,13 +81,13 @@ class MotorManagerWidget(QMainWindow):
 
         self._motor_status_subscriber = self._node.create_subscription(
             MotorStatus,
-            'motor_status',
+            'motion_control/motor_status',
             self.motor_status_callback,
             self._QOS_REKL5V,
         )
         self._motor_command_publisher = self._node.create_publisher(
             MotorStatus,
-            'motor_command',
+            'motion_control/motor_command',
             self._QOS_REKL5V,
         )
 

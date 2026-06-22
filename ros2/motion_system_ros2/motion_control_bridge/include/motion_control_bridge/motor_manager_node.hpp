@@ -22,13 +22,13 @@ public:
 private:
     void motor_command_callback(const MotorStatus::SharedPtr msg);
 
-    void user_command_callback(const Empty::SharedPtr msg);
+    void request_stop_callback(const Empty::SharedPtr msg);
 
     void timer_callback();
 
     rclcpp::Subscription<MotorStatus>::SharedPtr motor_command_subscriber_;
 
-    rclcpp::Subscription<Empty>::SharedPtr user_command_subscriber_;
+    rclcpp::Subscription<Empty>::SharedPtr request_stop_subscriber_;
 
     rclcpp::Publisher<MotorStatus>::SharedPtr motor_status_publisher_;
 

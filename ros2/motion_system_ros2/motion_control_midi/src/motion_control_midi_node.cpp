@@ -13,7 +13,6 @@
 
 #include <yaml-cpp/yaml.h>
 
-#include <ament_index_cpp/get_package_share_directory.hpp>
 #include <midi_msgs/msg/midi.hpp>
 #include <motion_control_msgs/msg/motor_status.hpp>
 #include <rclcpp/rclcpp.hpp>
@@ -31,19 +30,9 @@ constexpr uint16_t kCwSocketcanSetPoint = 0x0001;
 constexpr uint16_t kCwDynamixelEffortEnable = 1;
 
 constexpr double kFaderEpsilon = 0.5;
-constexpr const char * kConfigPackage = "motion_control_bridge";
-constexpr const char * kConfigRelativePath = "/config/example_socketcan_cubemars.yaml";
-constexpr const char * kMidiTopic = "/xtouch/midi";
-constexpr const char * kCommandTopic = "motion_control/motor_command";
 constexpr auto kPublishPeriod = std::chrono::milliseconds(5);
 constexpr double kMaxSmoothingTimeMs = 3000.0;
 constexpr double kSmoothingCurvePower = 2.0;
-
-std::string default_config_file()
-{
-  return ament_index_cpp::get_package_share_directory(kConfigPackage) +
-         kConfigRelativePath;
-}
 
 std::string to_lower(std::string s)
 {
@@ -91,7 +80,8 @@ public:
   explicit MotionControlMidiNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions())
   : rclcpp::Node("motion_control_midi_node", options)
   {
-    const std::string config_file = default_config_file();
+    const std::string config_file =
+      "src/ros2/motion_system_ros2/motion_control_bridge/config/example_socketcan_cubemars.yaml";
     publish_period_ = kPublishPeriod;
     max_smoothing_time_ms_ = kMaxSmoothingTimeMs;
     smoothing_curve_power_ = kSmoothingCurvePower;
@@ -103,10 +93,10 @@ public:
     motor_states_.resize(motor_infos_.size());
 
     motor_command_pub_ = create_publisher<MotorStatus>(
-      kCommandTopic, rclcpp::QoS(1).best_effort());
+      "motion_control/motor_command", rclcpp::QoS(1).best_effort());
 
     midi_sub_ = create_subscription<MidiMsg>(
-      kMidiTopic, rclcpp::QoS(1).best_effort(),
+      "/xtouch/midi", rclcpp::QoS(1).best_effort(),
       std::bind(&MotionControlMidiNode::midi_callback, this, std::placeholders::_1));
 
     command_tick_ = create_wall_timer(
@@ -116,7 +106,7 @@ public:
       get_logger(),
       "motion_control_midi_node ready. Loaded %zu controller(s) from '%s'; "
       "subscribing '%s', publishing '%s'.",
-      motor_infos_.size(), config_file.c_str(), kMidiTopic, kCommandTopic);
+      motor_infos_.size(), config_file.c_str(), "/xtouch/midi", "motion_control/motor_command");
   }
 
 private:

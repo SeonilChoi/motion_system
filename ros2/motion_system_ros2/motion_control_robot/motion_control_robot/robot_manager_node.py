@@ -7,7 +7,7 @@ from std_msgs.msg import Int8MultiArray
 from motion_control_msgs.msg import MotorStatus
 
 from common_robot_interface.joint_frame import joint_frame_t
-from common_robot_interface.state_frame import State, state_frame_t
+from common_robot_interface.state_frame import State
 from common_robot_interface.action_frame import Action, action_frame_t
 
 from robot_manager.robot_manager import RobotManager
@@ -37,6 +37,13 @@ class RobotManagerNode(Node):
         self.robot_manager = RobotManager(self.config_file)
         self.number_of_robots = self.robot_manager.number_of_robots
         self.dt = self.robot_manager.dt
+        self.robot_indices = self.robot_manager.robot_indices()
+        if not self.robot_indices:
+            raise RuntimeError('Robot configuration requires at least one robot.')
+        self.robot_action_indices = {
+            robot_index: i
+            for i, robot_index in enumerate(self.robot_indices)
+        }
 
         self.motor_status_subscriber = self.create_subscription(
             MotorStatus,
@@ -63,16 +70,16 @@ class RobotManagerNode(Node):
 
         self.joy_buttons: list[bool] = [False] * JOY_BUTTON_MAX
         self.joy_buttons_prev: list[bool] = [False] * JOY_BUTTON_MAX
-        self.joy_button_action: dict[int, int] = {
+        self.joy_button_action: dict[int, Action] = {
             JOY_BUTTON_SQUARE: Action.HOME,
             JOY_BUTTON_CIRCLE: Action.MOVE,
             JOY_BUTTON_CROSS: Action.STOP,
         }
 
-        self.selected_robot_index: int = 0
+        self.selected_robot_index: int = self.robot_indices[0]
         self.robot_actions: list[action_frame_t] = [
-            action_frame_t(robot_index=i, action=Action.STOP)
-            for i in range(self.number_of_robots)
+            action_frame_t(robot_index=robot_index, action=Action.STOP)
+            for robot_index in self.robot_indices
         ]
 
     def motor_status_callback(self, msg: MotorStatus):
@@ -104,25 +111,32 @@ class RobotManagerNode(Node):
 
     def joy_callback(self, msg: Joy):
         for btn in range(JOY_BUTTON_MAX):
-            self.joy_buttons[btn] = bool(msg.buttons[btn])
+            self.joy_buttons[btn] = btn < len(msg.buttons) and bool(msg.buttons[btn])
+
+    def selected_robot_action_index(self) -> int:
+        return self.robot_action_indices[self.selected_robot_index]
 
     def timer_callback(self):
         # Check if the robot is stopped because of the homing is completed
         state_frames = self.robot_manager.get_state_frames()
         for state_frame in state_frames:
-            if state_frame.state == State.STOPPED and self.robot_actions[state_frame.robot_index].action != Action.STOP:
-                self.robot_actions[state_frame.robot_index].action = Action.STOP
+            robot_action_index = self.robot_action_indices[state_frame.robot_index]
+            if state_frame.state == State.STOPPED and self.robot_actions[robot_action_index].action != Action.STOP:
+                self.robot_actions[robot_action_index].action = Action.STOP
 
         # Select the robot by the DPAD
         if self.joy_buttons[JOY_BUTTON_DPAD_LEFT] and not self.joy_buttons_prev[JOY_BUTTON_DPAD_LEFT]:
-            self.selected_robot_index = self.selected_robot_index - 1 if self.selected_robot_index > 0 else self.number_of_robots - 1
+            selected_action_index = self.selected_robot_action_index()
+            selected_action_index = selected_action_index - 1 if selected_action_index > 0 else self.number_of_robots - 1
+            self.selected_robot_index = self.robot_indices[selected_action_index]
         elif self.joy_buttons[JOY_BUTTON_DPAD_RIGHT] and not self.joy_buttons_prev[JOY_BUTTON_DPAD_RIGHT]:
-            self.selected_robot_index = (self.selected_robot_index + 1) % self.number_of_robots
+            selected_action_index = (self.selected_robot_action_index() + 1) % self.number_of_robots
+            self.selected_robot_index = self.robot_indices[selected_action_index]
 
         # Check if action button is pressed
         for btn, action in self.joy_button_action.items():
             if self.joy_buttons[btn] and not self.joy_buttons_prev[btn]:
-                self.robot_actions[self.selected_robot_index].action = action
+                self.robot_actions[self.selected_robot_action_index()].action = action
                 break
 
         # Send the action to the robot
